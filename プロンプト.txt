@@ -1,0 +1,70 @@
+以前のWSLを使用する開発・デプロイ指示を破棄し、以下の方針に変更してください。
+
+開発環境:
+- Windows 11ネイティブ
+- VS Code Codex拡張機能
+- PowerShell
+- Docker DesktopのLinux containersモード
+- WSLは使用しない
+- リポジトリは現在開いているbizflow-agentを使用する
+- AWS CLI v2はWindows版を使用する
+- AWS認証にはIAM Identity CenterのSSOプロファイルを使用する
+
+AgentCore Runtimeのデプロイ方式:
+- AgentCore CLIによるソースコード直接デプロイを前提にしない
+- AgentCore Runtime用Dockerイメージを作成する
+- イメージはlinux/arm64でビルドする
+- コンテナはポート8080で起動する
+- POST /invocationsとGET /pingを実装する
+- イメージをAmazon ECRへpushする
+- agentRuntimeArtifact.containerConfiguration.containerUriにECR URIを指定する
+- UpdateAgentRuntimeで新しいRuntimeバージョンを作成する
+- RuntimeがREADYになってからDEFAULTエンドポイントを新バージョンへ切り替える
+- 更新後にヘルスチェックとスモークテストを行う
+- 失敗した場合はDEFAULTエンドポイントを旧バージョンへ戻せるようにする
+
+イメージ管理:
+- latestタグを使用しない
+- GitコミットSHAまたはセマンティックバージョンをタグとして使用する
+- ECRリポジトリはタグ変更禁止にする
+- ECRのイメージスキャンを有効化する
+- ビルドしたイメージのタグ、digest、Runtimeバージョンをデプロイ結果に記録する
+
+IaCとアプリ更新を分離する:
+- 以前のアプリやCDKスタックで作成したAWSリソースは再利用しない
+- 今回のBizFlowアプリ専用のCDKスタックとAWSリソースを新規作成する
+- 初期構築は基盤作成、初回イメージpush、初期Runtime/DEFAULTエンドポイント作成の順に行う
+- CDKはECR、IAMロール、ログ、ネットワーク、初期Runtimeなどの基盤作成に使用する
+- 通常のエージェント更新ではcdk deployを実行しない
+- 通常更新はDocker build、ECR push、UpdateAgentRuntime、Endpoint更新で行う
+
+以下を作成する:
+- agents/bizflow/Dockerfile
+- agents/bizflow/.dockerignore
+- scripts/publish-agentcore.ps1
+- scripts/smoke-test-agentcore.ps1
+- docs/deployment.md
+- tests/runtime/test_endpoints.py
+
+publish-agentcore.ps1の要件:
+1. AWS_PROFILEとAWS_REGIONを明示的に受け取る
+2. aws sts get-caller-identityで接続先を表示する
+3. ARNがrootの場合は処理を中止する
+4. GitコミットSHAからイメージタグを作る
+5. docker buildxでlinux/arm64をビルドする
+6. ECRへログインしてイメージをpushする
+7. pushされたイメージdigestを取得する
+8. デフォルトではdry-runにする
+9. -Execute指定時のみUpdateAgentRuntimeを実行する
+10. 作成されたRuntimeバージョンがREADYになるまで待機する
+11. 明示的な確認後にDEFAULTエンドポイントを更新する
+12. スモークテストを実行する
+13. 旧バージョンへ戻すためのコマンドを最後に表示する
+
+UpdateAgentRuntimeではroleArnとnetworkConfigurationも必要になるため、
+今回新規作成するBizFlow専用CDKスタックのOutputsまたは設定ファイルから取得してください。
+他アプリや以前のCDKスタックのOutputsは使用しないでください。
+値をソースコードへ直接埋め込まないでください。
+
+最初は実装計画だけを提示してください。
+まだDocker push、UpdateAgentRuntime、CDK deployなどのAWS変更操作は実行しないでください。

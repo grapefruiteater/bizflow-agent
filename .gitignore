@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.env
+.env.*
+!.env.example
+cdk.out/
+node_modules/
+coverage/
+*.tsbuildinfo
+cdk-outputs.json
+config/cdk-outputs.json
+config/foundation-outputs.json
+deployments/agentcore/*.json

@@ -1,0 +1,10 @@
+{
+  "EcrRepositoryUri": "111122223333.dkr.ecr.ap-northeast-1.amazonaws.com/bizflow-agent",
+  "AgentRuntimeId": "BizFlowAgent-abcdefghij",
+  "AgentRuntimeArn": "arn:aws:bedrock-agentcore:ap-northeast-1:111122223333:agent/00000000-0000-0000-0000-000000000000:1",
+  "AgentRuntimeExecutionRoleArn": "arn:aws:iam::111122223333:role/BizFlowAgentRuntimeRole",
+  "AgentRuntimeNetworkConfiguration": {
+    "networkMode": "PUBLIC"
+  },
+  "AgentRuntimeEndpointName": "DEFAULT"
+}

@@ -107,6 +107,8 @@ bizflow-agent/
 - ECRが `IMMUTABLE` かつscan-on-push有効であることを確認する
 - dirty worktreeを拒否し、GitコミットSHAとコンテナ内容を一致させる
 - `latest` タグを使わない
+- 同じGit SHAタグがECRに既に存在する場合、immutableタグを再pushせず停止する
+- 自動更新される`DEFAULT` Endpointでは`-Execute`を拒否し、明示昇格用のカスタムEndpointを要求する
 - Runtimeが `READY` になるまでEndpointを更新しない
 - 新Runtimeバージョンの手入力後にだけDEFAULT Endpointを切り替える
 - 旧バージョンへ戻すコマンドを最後に表示する

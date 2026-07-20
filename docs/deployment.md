@@ -349,7 +349,7 @@ Runtime Stackは `agentImageDigest` がない場合にはCDKアプリへ追加�
   -StackName BizFlowAgentRuntimeStack
 ```
 
-dry-runでも接続先とECR設定を確定するため、読み取り専用の `sts get-caller-identity` と `ecr describe-repositories` は実行します。それ以外のbuild、ECRログイン、push、Runtime更新、Endpoint更新は実行しません。
+dry-runでも接続先、ECR設定、同一Git SHAタグの有無を確定するため、読み取り専用の `sts get-caller-identity`、`ecr describe-repositories`、`ecr batch-get-image` は実行します。それ以外のbuild、ECRログイン、push、Runtime更新、Endpoint更新は実行しません。
 
 次の場合は処理を中止します。
 
@@ -359,12 +359,15 @@ dry-runでも接続先とECR設定を確定するため、読み取り専用の 
 - ECRが `IMMUTABLE` ではない、またはscan-on-pushが無効
 - Git worktreeに未コミット変更がある
 - GitコミットSHAを取得できない
+- 同じGitコミットSHAのタグが不変ECRリポジトリに既に存在する（`-Execute`時）
 - 必須のCDK Outputがない
 - `networkConfiguration` が不正
 
 Git worktreeをcleanにするのは、SHAタグと実際のコンテナ内容を必ず一致させるためです。イメージタグには完全な40文字のGitコミットSHAを使用し、`latest` は使用しません。
 
 ## 公開とRuntime更新
+
+> **重要:** AgentCoreの `DEFAULT` Endpointは `UpdateAgentRuntime` による新Version作成時に自動で最新版へ移ります。そのため、手入力確認後にだけトラフィックを昇格する運用には使用できません。現在の公開スクリプトは、安全のため `AgentRuntimeEndpointName` が `DEFAULT` の状態での `-Execute` を拒否します。明示昇格を維持するには、`PROD`などのカスタムEndpointをCDKで作成し、Outputsをその名前へ変更する必要があります。
 
 dry-runの内容を確認した後、`-Execute` を付けます。
 
@@ -459,7 +462,7 @@ aws bedrock-agentcore-control update-agent-runtime-endpoint `
 - Runtimeが `READY` にならない場合: AgentCore RuntimeのCloudWatch Logsでコンテナ起動、ポート8080、ARM64、IAM/ECR pull権限を確認する。
 - Endpoint更新が失敗した場合: 旧 `liveVersion` が引き続き稼働しているか確認する。
 - スモークテストが失敗した場合: ロールバックコマンドを利用できる状態を維持し、Runtimeログと呼び出し応答を確認する。
-- 同じSHAタグのpushが拒否された場合: ECRタグ不変設定が正常に機能している。既存タグを上書きせず、新しいコミットを作成する。
+- 同じSHAタグが既に存在する場合: スクリプトはDocker build/push前に停止する。既存タグを上書きせず、変更をコミットして新しいGit SHAで公開する。初期Runtimeが既にそのイメージを使用しているだけなら、同じコミットを通常更新として再公開する必要はない。
 
 ## AWS公式仕様
 

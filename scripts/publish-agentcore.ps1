@@ -64,8 +64,18 @@ function Invoke-NativeText {
         Write-NativeCommand -Command $Command -Arguments $Arguments
     }
 
-    $outputLines = @(& $Command @Arguments 2>&1)
-    $exitCode = $LASTEXITCODE
+    # BuildKit and some other native tools write normal progress to stderr.
+    # With ErrorActionPreference=Stop, PowerShell can otherwise turn the first
+    # progress line into a terminating ErrorRecord before the process finishes.
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $outputLines = @(& $Command @Arguments 2>&1)
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
     $text = ($outputLines | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine
     if ($exitCode -ne 0) {
         throw "Command failed with exit code ${exitCode}: $Command`n$text"
@@ -340,6 +350,14 @@ Assert-CommandExists -Name "docker"
 $configuration = Read-DeploymentConfiguration -Path $ConfigPath -RequestedStackName $StackName
 $ecr = Get-EcrDetails -RepositoryUri $configuration.EcrRepositoryUri
 
+if ($configuration.EndpointName -ieq "DEFAULT") {
+    $defaultEndpointMessage = "AgentCore automatically moves the DEFAULT endpoint when UpdateAgentRuntime creates a new version. The required manual approval before traffic promotion cannot be enforced with DEFAULT. Configure a custom endpoint such as PROD before executable publishing."
+    if ($Execute) {
+        throw $defaultEndpointMessage
+    }
+    Write-Warning $defaultEndpointMessage
+}
+
 $gitRoot = Invoke-NativeText -Command "git" -Arguments @("-C", $repoRoot, "rev-parse", "--show-toplevel")
 if ((Resolve-Path $gitRoot).Path -ne $repoRoot) {
     throw "The script must be run from the BizFlow Agent Git repository. Resolved root: $gitRoot"
@@ -387,6 +405,17 @@ if (-not [bool]$repository.imageScanningConfiguration.scanOnPush) {
 Write-Host "  ECR tags: IMMUTABLE"
 Write-Host "  ECR scan: scan-on-push enabled"
 
+$existingImageResult = Invoke-AwsJson -Arguments @(
+    "ecr", "batch-get-image",
+    "--repository-name", $ecr.RepositoryName,
+    "--image-ids", "imageTag=$imageTag"
+)
+$existingImage = @($existingImageResult.images)[0]
+$existingImageDigest = $null
+if ($null -ne $existingImage) {
+    $existingImageDigest = [string]$existingImage.imageId.imageDigest
+}
+
 $agentDirectory = Join-Path $repoRoot "agents\bizflow"
 $dockerfilePath = Join-Path $agentDirectory "Dockerfile"
 if (-not (Test-Path -LiteralPath $dockerfilePath -PathType Leaf)) {
@@ -401,12 +430,16 @@ Write-Host "  Runtime ID:       $($configuration.AgentRuntimeId)"
 Write-Host "  Endpoint:         $($configuration.EndpointName)"
 Write-Host "  Network mode:     $($configuration.NetworkConfiguration.networkMode)"
 Write-Host "  Config:           $ConfigPath"
+if ($existingImageDigest) {
+    Write-Host "  Existing digest:  $existingImageDigest" -ForegroundColor Yellow
+}
 
 if (-not $Execute) {
     Write-Host ""
     Write-Host "DRY RUN: no image build, ECR login/push, Runtime update, or Endpoint update will be performed." -ForegroundColor Yellow
     Write-NativeCommand -Command "docker" -Arguments @(
         "buildx", "build", "--platform", "linux/arm64",
+        "--progress", "plain",
         "--file", $dockerfilePath,
         "--label", "org.opencontainers.image.revision=$gitCommit",
         "--tag", $imageUri,
@@ -415,6 +448,10 @@ if (-not $Execute) {
     Write-Host "After push, the script will deploy the immutable digest URI and wait for READY."
     Write-Host "Re-run with -Execute to perform the publish workflow."
     return
+}
+
+if ($existingImageDigest) {
+    throw "ECR image tag '$imageTag' already exists with digest '$existingImageDigest'. The repository is immutable, so the same Git commit cannot be pushed again. Commit the intended application change and publish the new commit SHA."
 }
 
 $failed = $false
@@ -462,6 +499,7 @@ try {
 
     $buildArguments = @(
         "buildx", "build", "--platform", "linux/arm64",
+        "--progress", "plain",
         "--file", $dockerfilePath,
         "--label", "org.opencontainers.image.revision=$gitCommit",
         "--tag", $imageUri,

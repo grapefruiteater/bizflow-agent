@@ -4,7 +4,7 @@ Amazon Bedrock AgentCore Runtimeで動作するBizFlowエージェントのコ�
 
 開発はWindows 11ネイティブ、PowerShell、Docker DesktopのLinux containersモードを前提とし、WSLは使用しません。
 
-AWS基盤は、以前のアプリやCDKスタックで作成したリソースを再利用しません。今回のBizFlowアプリ専用スタックとして新規作成します。初期構築だけCDKを使い、通常のエージェント更新ではCDKを実行せず、ARM64コンテナイメージのbuild、ECRへのpush、Runtimeバージョン作成、DEFAULT Endpoint切り替えを個別に行います。
+AWS基盤は、以前のアプリやCDKスタックで作成したリソースを再利用しません。今回のBizFlowアプリ専用スタックとして新規作成します。初期構築だけCDKを使い、通常のエージェント更新ではCDKを実行せず、ARM64コンテナイメージのbuild、ECRへのpush、Runtimeバージョン作成、`PROD` Endpoint切り替えを個別に行います。AgentCoreが自動更新する`DEFAULT`は本番トラフィックに使用しません。
 
 ## 現在の実装範囲
 
@@ -16,7 +16,7 @@ AgentCore Runtimeが要求する次のHTTP Endpointを実装しています。
 - ポート：`8080`
 - コンテナ：`linux/arm64`
 
-`agents/bizflow/app.py` の `handle_invocation()` は、HTTP・コンテナ・デプロイ経路を検証するための最小応答です。実際のStrands AgentsやBizFlow業務処理は、この関数へ接続してください。
+`POST /invocations` はStrands AgentsとAmazon Bedrockモデルを使う、読み取り専用の業務分析へ接続されています。現段階では入力された情報だけを分析し、AWSデータの読み取り、タスク登録、データ更新、外部送信は行いません。書き込み可能なツールも渡していません。モデルIDはソースへ固定せず、Runtime環境変数 `BIZFLOW_MODEL_ID` から取得します。
 
 ## ファイル構成
 
@@ -27,6 +27,7 @@ bizflow-agent/
 │   └── bizflow/
 │       ├── __init__.py
 │       ├── app.py
+│       ├── bizflow_agent.py
 │       ├── Dockerfile
 │       ├── .dockerignore
 │       ├── requirements.txt
@@ -50,6 +51,7 @@ bizflow-agent/
 │   └── smoke-test-agentcore.ps1
 ├── tests/
 │   └── runtime/
+│       ├── test_bizflow_agent.py
 │       └── test_endpoints.py
 ├── .gitignore
 ├── cdk.json
@@ -71,9 +73,10 @@ bizflow-agent/
 | `agents/__init__.py` | `agents` をPythonパッケージとして扱うための初期化ファイルです。 |
 | `agents/bizflow/__init__.py` | BizFlow Runtimeパッケージの初期化ファイルです。 |
 | `agents/bizflow/app.py` | FastAPIによるAgentCore HTTP Runtimeです。`/ping`、`/invocations`、入力検証、Runtime session IDヘッダーの受け渡し、内部エラーのマスキングを実装しています。 |
+| `agents/bizflow/bizflow_agent.py` | Strands Agent、Bedrockモデル設定、読み取り専用システムプロンプトを実装します。モデルは呼び出しごとに会話履歴を持たない形で生成し、ツールは一切公開しません。ローカルコンテナ検証専用の決定的な `local-test` providerも含みます。 |
 | `agents/bizflow/Dockerfile` | Python 3.12ベースのRuntimeイメージを作成します。ポート8080を公開し、非rootユーザー `app` でUvicornを起動します。 |
 | `agents/bizflow/.dockerignore` | Git情報、仮想環境、テスト、ドキュメント、ローカル設定などをDocker build contextから除外します。 |
-| `agents/bizflow/requirements.txt` | Runtimeで必要なFastAPIとUvicornの固定バージョンを定義します。 |
+| `agents/bizflow/requirements.txt` | Runtimeで必要なFastAPI、Uvicorn、Strands Agentsの固定バージョンを定義します。 |
 | `agents/bizflow/requirements-dev.txt` | Runtime依存関係に加え、pytestとHTTPテスト用パッケージを定義します。 |
 
 ### 設定・公開
@@ -81,18 +84,18 @@ bizflow-agent/
 | ファイル | 説明 |
 |---|---|
 | `config/agentcore.example.json` | BizFlow専用CDK Outputsまたは環境別設定ファイルの形式例です。値は例示用であり、そのまま使用しません。 |
-| `config/cdk-outputs.json` | BizFlow専用スタックの初期構築後に生成する環境固有ファイルです。現在入っている例示値はAWSリソースを示していないため、公開には使用できません。 |
+| `config/cdk-outputs.json` | BizFlow専用スタックのdeploy後に生成する環境固有ファイルです。Git管理せず、公開スクリプトの入力として使用します。 |
 | `scripts/publish-agentcore.ps1` | Git SHAタグによるARM64イメージ公開とAgentCore Runtime更新を行います。デフォルトはdry-runで、`-Execute` 指定時のみbuild/pushとRuntime更新へ進みます。 |
-| `scripts/smoke-test-agentcore.ps1` | ローカルコンテナまたはAgentCore上のDEFAULT Endpointを検証します。リモートではEndpoint状態・liveVersion・実呼び出しを確認します。 |
+| `scripts/smoke-test-agentcore.ps1` | ローカルコンテナまたはAgentCore上の`PROD` Endpointを検証します。リモートではEndpoint状態・liveVersion・実呼び出しを確認します。 |
 | `docs/deployment.md` | Windowsネイティブ環境の準備、CDK Outputs契約、dry-run、公開、ヘルスチェック、デプロイ記録、ロールバックの詳細手順です。 |
 
 ### CDK基盤
 
 | ファイル | 説明 |
 |---|---|
-| `infra/bin/bizflow-agent.ts` | CDKアプリのエントリーポイントです。常にFoundation Stackを定義し、`agentImageDigest` contextがある場合だけRuntime Stackも定義します。 |
+| `infra/bin/bizflow-agent.ts` | CDKアプリのエントリーポイントです。常にFoundation Stackを定義し、`agentImageDigest` と `bedrockModelId` contextがある場合だけRuntime Stackも定義します。 |
 | `infra/lib/foundation-stack.ts` | BizFlow専用ECR、AgentCore実行IAMロール、`PUBLIC`ネットワーク設定を作成します。ECRは不変タグ、push時scan、Retainを設定します。 |
-| `infra/lib/runtime-stack.ts` | digest固定の初回コンテナからAgentCore Runtime、30日保持のRuntimeロググループ、通常更新用Outputsを作成します。`DEFAULT` EndpointはRuntime作成時にAgentCoreが自動作成します。 |
+| `infra/lib/runtime-stack.ts` | digest固定の初回コンテナからAgentCore Runtime、`PROD`カスタムEndpoint、Endpoint別の30日保持ロググループ、通常更新用Outputsを作成します。`DEFAULT` EndpointはRuntime作成時にAgentCoreが自動作成します。 |
 | `infra/test/foundation-stack.test.ts` | ECRとIAM、およびFoundation OutputsのCloudFormation定義を検証します。 |
 | `infra/test/runtime-stack.test.ts` | Runtime、Endpoint、ログ、Outputsを検証し、タグや不正なdigestを拒否することを確認します。 |
 | `package.json` / `package-lock.json` | Node.js/CDK依存関係を固定し、型チェックとCDKテストのコマンドを定義します。Node.js 20以上が必要です。 |
@@ -101,6 +104,7 @@ bizflow-agent/
 `publish-agentcore.ps1` には次の安全策があります。
 
 - `AWS_PROFILE` と `AWS_REGION` を必須入力にする
+- 使用するBedrockモデルまたはinference profileのIDを `ModelId` として必須入力にし、Runtime環境変数へ渡す
 - `sts get-caller-identity` で接続先を表示する
 - root ARNを拒否する
 - AWS AccountとECR URIのAccountが異なる場合に停止する
@@ -110,7 +114,7 @@ bizflow-agent/
 - 同じGit SHAタグがECRに既に存在する場合、immutableタグを再pushせず停止する
 - 自動更新される`DEFAULT` Endpointでは`-Execute`を拒否し、明示昇格用のカスタムEndpointを要求する
 - Runtimeが `READY` になるまでEndpointを更新しない
-- 新Runtimeバージョンの手入力後にだけDEFAULT Endpointを切り替える
+- 新Runtimeバージョンの手入力後にだけ`PROD` Endpointを切り替える
 - 旧バージョンへ戻すコマンドを最後に表示する
 
 ### テスト・補助ファイル
@@ -118,6 +122,7 @@ bizflow-agent/
 | ファイル | 説明 |
 |---|---|
 | `tests/runtime/test_endpoints.py` | `/ping`、`/invocations`、入力エラー、session ID、内部エラー応答をAWS接続なしで検証するpytestです。 |
+| `tests/runtime/test_bizflow_agent.py` | Runtime設定、ローカルテストprovider、依存注入した分析処理、空応答の拒否をAWS接続なしで検証するpytestです。 |
 | `.gitignore` | 仮想環境、Pythonキャッシュ、CDK成果物、環境別CDK Outputs、生成したデプロイ記録をGit管理対象から除外します。 |
 | `bizflow_agent_architecture.drawio` | BizFlow AgentのAWS全体構成と処理フローを示すdraw.io構成図です。 |
 | `プロンプト.txt` | 開発環境、コンテナ方式、イメージ管理、IaCと通常更新の分離方針を記録しています。 |
@@ -134,13 +139,14 @@ bizflow-agent/
    - Runtimeログ、メトリクス、トレースに必要なIAM権限
    - `PUBLIC`ネットワーク設定
 2. 作成した専用ECRへ、最初の `linux/arm64` イメージをGit SHAタグでpushする。
-3. push済みイメージのdigest URIを使い、`BizFlowAgentRuntimeStack` を新規deployする。
+3. push済みイメージのdigest URIと明示したBedrockモデルIDを使い、`BizFlowAgentRuntimeStack` を新規deployする。
    - 初期AgentCore Runtime
    - Runtime作成時にAgentCoreが自動作成する初期Versionと`DEFAULT` Runtime Endpoint
-   - AgentCore標準命名のCloudWatch Logsロググループ
+   - 初期Versionを指す`PROD`カスタムEndpoint
+   - `DEFAULT`・`PROD`別のCloudWatch Logsロググループ
    - 公開スクリプトが必要とするCDK Outputs
 4. Outputsを `config/cdk-outputs.json` に保存する。
-5. 初期RuntimeとDEFAULT Endpointのヘルスチェックを行う。
+5. 初期Runtimeと`PROD` Endpointのヘルスチェックを行う。
 
 AgentCore Runtimeは、空のECRリポジトリだけでは作成できません。初回イメージが必要になるため、FoundationとRuntimeを段階分けします。Runtime StackにはECR URI全体ではなく `sha256:...` digestだけを渡し、今回のFoundation Stackが作成したECR URIとCDK内で結合します。別プロジェクトのECRを誤って参照できない設計です。
 
@@ -152,8 +158,11 @@ CDKソースとローカルテストは実装済みです。AWSリソースの�
 
 1. Docker buildと専用ECRへのpush
 2. `UpdateAgentRuntime` による新Runtimeバージョン作成
+   - `BIZFLOW_MODEL_PROVIDER=bedrock`
+   - `BIZFLOW_MODEL_ID=<明示したモデルまたはinference profile ID>`
+   - `BIZFLOW_AWS_REGION=<明示したリージョン>`
 3. `READY` 待機
-4. 明示確認後にDEFAULT Endpointを切り替え
+4. 明示確認後に`PROD` Endpointを切り替え
 5. スモークテスト
 
 この段階では `cdk deploy` を実行しません。再利用するのは他アプリのAWS構成ではなく、今回新規作成したBizFlow専用スタックのOutputsです。
@@ -178,7 +187,7 @@ npm test
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --requirement .\agents\bizflow\requirements-dev.txt
-python -m pytest .\tests\runtime\test_endpoints.py
+python -m pytest .\tests\runtime
 ```
 
 ### ARM64コンテナ
@@ -191,7 +200,10 @@ docker buildx build `
   --load `
   .\agents\bizflow
 
-docker run --rm --platform linux/arm64 --publish 8080:8080 bizflow-agent:local
+docker run --rm --platform linux/arm64 `
+  --env BIZFLOW_MODEL_PROVIDER=local-test `
+  --publish 8080:8080 `
+  bizflow-agent:local
 ```
 
 別のPowerShellでスモークテストを実行します。
@@ -208,8 +220,11 @@ BizFlow専用基盤の初期構築が完了した後、通常更新では最初�
 .\scripts\publish-agentcore.ps1 `
   -AWS_PROFILE <SSOプロファイル名> `
   -AWS_REGION <AWSリージョン> `
+  -ModelId <Bedrockモデルまたはinference-profile-ID> `
   -ConfigPath .\config\cdk-outputs.json `
   -StackName BizFlowAgentRuntimeStack
 ```
+
+`ModelId` には、対象リージョンで利用でき、Runtime実行ロールが `bedrock:InvokeModel` を許可しているモデルIDまたはinference profile IDを指定します。例示値をそのまま使わず、採用モデルを明示的に決定してください。
 
 `publish-agentcore.ps1` はAWS基盤を作成しません。初期基盤はBizFlow専用CDKスタックで新規作成し、通常更新時には `cdk deploy` を実行しません。詳細は [`docs/deployment.md`](docs/deployment.md) を参照してください。

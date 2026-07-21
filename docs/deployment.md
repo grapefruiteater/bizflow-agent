@@ -14,17 +14,17 @@
 - IAM Identity CenterのSSOプロファイル
 - WSLは使用しない
 
-以前のアプリやCDKスタックで作成したAWSリソースは再利用しません。今回のBizFlowアプリ専用CDKスタックとしてECR、IAMロール、ログ、ネットワーク設定、初期AgentCore Runtime、DEFAULT Endpointを新規作成します。通常のアプリ更新では `cdk deploy` を実行せず、Dockerイメージのbuild/push、`UpdateAgentRuntime`、Runtime Endpoint更新を使用します。
+以前のアプリやCDKスタックで作成したAWSリソースは再利用しません。今回のBizFlowアプリ専用CDKスタックとしてECR、IAMロール、ログ、ネットワーク設定、初期AgentCore Runtime、`PROD` Endpointを新規作成します。通常のアプリ更新では `cdk deploy` を実行せず、Dockerイメージのbuild/push、`UpdateAgentRuntime`、`PROD` Endpoint更新を使用します。サービス管理の`DEFAULT` Endpointは常に最新Versionを指すため、本番トラフィックには使用しません。
 
-> 現在の `agents/bizflow/app.py` はAgentCore HTTP契約を検証するための最小Runtimeです。`handle_invocation()` を実際のStrands/BizFlow業務ロジックへ接続してから本番利用してください。
+> 現在のRuntimeはStrands AgentsとAmazon Bedrockモデルを使う読み取り専用分析まで実装しています。入力外のAWSデータは参照せず、タスク登録などの書き込みツールはまだ実装していません。
 
 ## BizFlow専用AWS基盤の新規作成
 
 ### 現在の状態
 
-CDKソースは `infra` に実装済みです。以下は実装済みCDKの契約と実行順序です。この作業ではローカルの型チェックとユニットテストまでを行い、AWS変更コマンドは実行していません。対象Account・Regionへの変更を明示的に承認するまでは、bootstrap、deploy、ECR pushを実行しません。
+CDKソースは `infra` に実装済みです。初期Foundation、Runtime Version 1、サービス管理`DEFAULT`に加え、Version 1を参照する明示昇格用`PROD` Endpointのデプロイ完了をAWSコンソールで確認済みです。以後のアプリ更新ではCDKを使わず、公開スクリプトで新Versionを作成して`PROD`へ昇格します。
 
-現在の `config/cdk-outputs.json` に入っている `111122223333` などは例示値です。以前のAWS構成を指しておらず、初期構築や公開に使用できません。BizFlow専用スタックのdeploy結果で置き換えます。
+`config/cdk-outputs.json` はBizFlow専用スタックの実環境Outputsです。環境固有情報を含むためGit管理せず、Runtime Stackをdeployしたときだけ更新します。形式例は `config/agentcore.example.json` に保持します。
 
 ### スタック分割
 
@@ -47,10 +47,11 @@ CDKソースは `infra` に実装済みです。以下は実装済みCDKの契�
 
 - 初回イメージのdigest URIを参照する初期AgentCore Runtime
 - Runtime作成時にAgentCoreが自動作成する初期Versionと `DEFAULT` Runtime Endpoint
-- AgentCore標準名 `/aws/bedrock-agentcore/runtimes/<runtime-id>-DEFAULT` のロググループ（30日保持、Retain）
+- 初期Versionを明示参照する `PROD` Runtime Endpoint
+- AgentCore標準名 `/aws/bedrock-agentcore/runtimes/<runtime-id>-<endpoint-name>` のEndpoint別ロググループ（30日保持、Retain）
 - 通常更新スクリプトへ渡すCDK Outputs
 
-初期構築では `AWS::BedrockAgentCore::Runtime` をCDK/CloudFormation管理します。AgentCoreはRuntime作成時に初期Versionと `DEFAULT` Endpointを自動作成するため、`AWS::BedrockAgentCore::RuntimeEndpoint` で同名Endpointを重複作成しません。
+初期構築では `AWS::BedrockAgentCore::Runtime` と、名前が `PROD` の `AWS::BedrockAgentCore::RuntimeEndpoint` をCDK/CloudFormation管理します。AgentCoreはRuntime作成時に初期Versionと `DEFAULT` Endpointを自動作成するため、`DEFAULT`はCloudFormationで重複作成しません。
 
 ### 初期構築の実行順序
 
@@ -148,19 +149,20 @@ $Digest = aws ecr describe-images `
 
 #### 5. 初期Runtimeを新規作成する
 
-CDK実装では `agentImageDigest` contextをRuntime Stackへ渡します。ECR URI全体を入力させないことで、Foundation Stackが作成した専用ECRだけを参照します。
+CDK実装では `agentImageDigest` と `bedrockModelId` contextをRuntime Stackへ渡します。ECR URI全体を入力させないことで、Foundation Stackが作成した専用ECRだけを参照します。モデルIDは、対象リージョンで利用でき、Runtime実行ロールが呼び出せるものを明示します。
 
 ```powershell
 npx cdk deploy BizFlowAgentRuntimeStack `
   --context "environment=dev" `
   --context "agentImageDigest=$Digest" `
+  --context "bedrockModelId=<Bedrockモデルまたはinference-profile-ID>" `
   --profile $AwsProfile `
   --outputs-file .\config\cdk-outputs.json
 ```
 
 Runtime StackはFoundation Stackの値を参照できますが、参照対象は今回作成した `BizFlowAgentFoundationStack` だけです。以前のプロジェクトのOutputsやARNは入力しません。
 
-Runtime作成が成功すると、AgentCoreが初期Versionと `DEFAULT` Endpointを自動作成します。CDKから別の `DEFAULT` Endpointは作成しません。
+Runtime作成が成功すると、AgentCoreが初期Versionと `DEFAULT` Endpointを自動作成します。CDKは同じ初期Versionを指す`PROD` Endpointを追加します。
 
 #### 6. Outputsと初期稼働を確認する
 
@@ -172,21 +174,49 @@ Runtime作成が成功すると、AgentCoreが初期Versionと `DEFAULT` Endpoin
 - `AgentRuntimeExecutionRoleArn`
 - `AgentRuntimeNetworkConfiguration`
 - `AgentRuntimeEndpointName`
+- `AgentRuntimeEndpointArn`
 - `RuntimeLogGroupName`
+- `DefaultRuntimeLogGroupName`
 - `InitialAgentImageDigest`
 - `InitialAgentImageUri`
+- `InitialBedrockModelId`
 
-初期RuntimeとDEFAULT Endpointが `READY` になり、スモークテストに成功したら初期構築完了です。
+初期Runtimeと`PROD` Endpointが `READY` になり、`PROD`へのスモークテストに成功したら初期構築完了です。
 
 ### 初期構築後
 
 以後のアプリ更新でFoundation StackやRuntime Stackをdeployしません。`config/cdk-outputs.json` は今回作成したBizFlow専用基盤を識別する設定として、`publish-agentcore.ps1` が読み取ります。
+
+### 既存Version 1環境への`PROD`追加
+
+`DEFAULT`だけを持つ旧版CDKで初期構築済みの場合は、現在の `InitialAgentImageDigest` を使ってRuntime Stackを一度だけ更新します。この変更は既存Runtimeを置き換えず、初期Versionを指す`PROD` Endpointとそのロググループを追加し、Outputsの `AgentRuntimeEndpointName` を `PROD` に更新するためのIaC変更です。実行前に `cdk diff` で差分を確認してください。
+
+```powershell
+$CurrentOutputs = Get-Content .\config\cdk-outputs.json -Raw | ConvertFrom-Json
+$Digest = $CurrentOutputs.BizFlowAgentRuntimeStack.InitialAgentImageDigest
+
+npx cdk diff BizFlowAgentRuntimeStack `
+  --context "environment=dev" `
+  --context "agentImageDigest=$Digest" `
+  --context "bedrockModelId=<Bedrockモデルまたはinference-profile-ID>" `
+  --profile $AwsProfile
+
+npx cdk deploy BizFlowAgentRuntimeStack `
+  --context "environment=dev" `
+  --context "agentImageDigest=$Digest" `
+  --context "bedrockModelId=<Bedrockモデルまたはinference-profile-ID>" `
+  --profile $AwsProfile `
+  --outputs-file .\config\cdk-outputs.json
+```
+
+この一度限りの移行が完了した後、通常更新ではCDKを実行しません。
 
 ## ディレクトリ構成
 
 ```text
 agents/bizflow/
   app.py
+  bizflow_agent.py
   Dockerfile
   .dockerignore
   requirements.txt
@@ -205,6 +235,7 @@ scripts/
   publish-agentcore.ps1
   smoke-test-agentcore.ps1
 tests/runtime/
+  test_bizflow_agent.py
   test_endpoints.py
 deployments/agentcore/
   <実行時に生成されるデプロイ記録>.json
@@ -253,10 +284,10 @@ aws sso login --profile <SSOプロファイル名>
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --requirement .\agents\bizflow\requirements-dev.txt
-python -m pytest .\tests\runtime\test_endpoints.py
+python -m pytest .\tests\runtime
 ```
 
-このテストはAWSへ接続しません。`GET /ping`、`POST /invocations`、入力検証、Runtime session IDの受け渡しをローカルで検証します。
+このテストはAWSへ接続しません。`GET /ping`、`POST /invocations`、入力検証、Runtime session ID、モデル設定、読み取り専用分析の依存注入をローカルで検証します。
 
 ## コンテナのローカル検証
 
@@ -270,7 +301,10 @@ docker buildx build `
   --load `
   .\agents\bizflow
 
-docker run --rm --platform linux/arm64 --publish 8080:8080 bizflow-agent:local
+docker run --rm --platform linux/arm64 `
+  --env BIZFLOW_MODEL_PROVIDER=local-test `
+  --publish 8080:8080 `
+  bizflow-agent:local
 ```
 
 別のPowerShellからローカルスモークテストを実行します。
@@ -284,6 +318,8 @@ docker run --rm --platform linux/arm64 --publish 8080:8080 bizflow-agent:local
 - `GET /ping` → HTTP 200、`{"status":"Healthy"}`
 - `POST /invocations` → `{"prompt":"..."}` または `{"input":{"prompt":"..."}}`
 
+`local-test` providerはAWSへ接続せず、HTTP・コンテナ契約だけを検証する専用モードです。公開スクリプトはRuntimeへ必ず `BIZFLOW_MODEL_PROVIDER=bedrock` を設定するため、AWS環境では使用しません。
+
 ## CDK Outputs・設定ファイル契約
 
 `UpdateAgentRuntime` ではコンテナURIに加え、今回新規作成したBizFlow専用Runtimeの `roleArn` と `networkConfiguration` が必要です。これらをスクリプトやDockerイメージへ直接埋め込んではいけません。他アプリや以前のCDKスタックの値も使用しません。
@@ -293,7 +329,7 @@ docker run --rm --platform linux/arm64 --publish 8080:8080 bizflow-agent:local
 1. 次のキーを持つ正規化JSON
 2. CDKの `--outputs-file` が生成した、スタック名をトップレベルキーに持つJSON
 
-正規化JSONの形式は `config/agentcore.example.json` を参照してください。例示値をコピーした `config/cdk-outputs.json` は実環境のOutputsではありません。
+正規化JSONの形式は `config/agentcore.example.json` を参照してください。`config/cdk-outputs.json` はCDKが生成した実環境のOutputsであり、例示ファイルとは分けてGit管理対象外にします。
 
 ```json
 {
@@ -304,7 +340,7 @@ docker run --rm --platform linux/arm64 --publish 8080:8080 bizflow-agent:local
   "AgentRuntimeNetworkConfiguration": {
     "networkMode": "PUBLIC"
   },
-  "AgentRuntimeEndpointName": "DEFAULT"
+  "AgentRuntimeEndpointName": "PROD"
 }
 ```
 
@@ -333,7 +369,7 @@ const repository = new ecr.Repository(this, "BizFlowAgentRepository", {
 });
 ```
 
-Runtime Stackは `agentImageDigest` がない場合にはCDKアプリへ追加されません。このため、空のECRしかない段階ではFoundation Stackだけをdeployでき、初回イメージpush後にRuntime Stackを定義できます。通常更新ではこのcontextやCDKを使わず、`publish-agentcore.ps1` が保存済みOutputsを再利用します。
+Runtime Stackは `agentImageDigest` がない場合にはCDKアプリへ追加されません。`agentImageDigest` を指定した場合は `bedrockModelId` も必須です。このため、空のECRしかない段階ではFoundation Stackだけをdeployでき、初回イメージpush後にRuntime Stackを定義できます。通常更新ではこれらのcontextやCDKを使わず、`publish-agentcore.ps1` が保存済みOutputsを再利用します。
 
 通常更新でCDK Outputsを取り直すために `cdk deploy` を実行してはいけません。今回のBizFlow専用初期構築で保存したoutputsファイル、またはそこから作成した承認済みの環境別設定ファイルを使用します。
 
@@ -345,11 +381,14 @@ Runtime Stackは `agentImageDigest` がない場合にはCDKアプリへ追加�
 .\scripts\publish-agentcore.ps1 `
   -AWS_PROFILE <SSOプロファイル名> `
   -AWS_REGION ap-northeast-1 `
+  -ModelId <Bedrockモデルまたはinference-profile-ID> `
   -ConfigPath .\config\cdk-outputs.json `
   -StackName BizFlowAgentRuntimeStack
 ```
 
 dry-runでも接続先、ECR設定、同一Git SHAタグの有無を確定するため、読み取り専用の `sts get-caller-identity`、`ecr describe-repositories`、`ecr batch-get-image` は実行します。それ以外のbuild、ECRログイン、push、Runtime更新、Endpoint更新は実行しません。
+
+`ModelId` はソースやOutputsへ埋め込まず、公開ごとに明示します。対象リージョンで利用でき、Runtime実行ロールの `bedrock:InvokeModel` 対象に含まれるモデルIDまたはinference profile IDを指定してください。現在のFoundation Stackは同一リージョンのfoundation modelと、同一リージョン・同一Accountのinference profileを許可しています。別リージョンへルーティングするprofileを採用する場合は、先にIAM設計を見直す必要があります。
 
 次の場合は処理を中止します。
 
@@ -367,7 +406,7 @@ Git worktreeをcleanにするのは、SHAタグと実際のコンテナ内容を
 
 ## 公開とRuntime更新
 
-> **重要:** AgentCoreの `DEFAULT` Endpointは `UpdateAgentRuntime` による新Version作成時に自動で最新版へ移ります。そのため、手入力確認後にだけトラフィックを昇格する運用には使用できません。現在の公開スクリプトは、安全のため `AgentRuntimeEndpointName` が `DEFAULT` の状態での `-Execute` を拒否します。明示昇格を維持するには、`PROD`などのカスタムEndpointをCDKで作成し、Outputsをその名前へ変更する必要があります。
+> **重要:** AgentCoreの `DEFAULT` Endpointは `UpdateAgentRuntime` による新Version作成時に自動で最新版へ移ります。本番トラフィックはVersion固定の`PROD` Endpointへ送り、公開スクリプトが明示確認後にだけ`PROD`を新Versionへ切り替えます。スクリプトは安全のため、Outputsが`DEFAULT`の状態での`-Execute`を拒否します。
 
 dry-runの内容を確認した後、`-Execute` を付けます。
 
@@ -375,6 +414,7 @@ dry-runの内容を確認した後、`-Execute` を付けます。
 .\scripts\publish-agentcore.ps1 `
   -AWS_PROFILE <SSOプロファイル名> `
   -AWS_REGION ap-northeast-1 `
+  -ModelId <Bedrockモデルまたはinference-profile-ID> `
   -ConfigPath .\config\cdk-outputs.json `
   -StackName BizFlowAgentRuntimeStack `
   -Execute
@@ -390,15 +430,18 @@ dry-runの内容を確認した後、`-Execute` を付けます。
 6. ECRからpush済みイメージのdigestを取得する。
 7. 現在のEndpoint `liveVersion` をロールバック用に保存する。
 8. `repository@sha256:...` を `containerConfiguration.containerUri` に指定する。
-9. CDK Outputs由来のrole/network設定で `UpdateAgentRuntime` を実行する。
-10. 新Runtimeバージョンを期限付きでポーリングする。
-11. `READY` 後、新バージョン番号の手入力を要求する。
-12. 入力が一致した場合だけDEFAULT Endpointを更新する。
-13. Endpointが `READY` かつ `liveVersion` が新バージョンになるまで待つ。
-14. `InvokeAgentRuntime` によるスモークテストを行う。
-15. デプロイ記録とロールバックコマンドを表示する。
+9. `BIZFLOW_MODEL_PROVIDER=bedrock`、`BIZFLOW_MODEL_ID`、`BIZFLOW_AWS_REGION` をRuntime環境変数へ設定する。
+10. CDK Outputs由来のrole/network設定と `metadataConfiguration.requireMMDSV2=true` で `UpdateAgentRuntime` を実行する。
+11. 新Runtimeバージョンを期限付きでポーリングする。
+12. `READY` 後、新バージョン番号の手入力を要求する。
+13. 入力が一致した場合だけ`PROD` Endpointを更新する。
+14. Endpointが `READY` かつ `liveVersion` が新バージョンになるまで待つ。
+15. `InvokeAgentRuntime` によるスモークテストを行う。
+16. デプロイ記録とロールバックコマンドを表示する。
 
-`-Execute` を指定していても、Endpoint切り替え確認で別の値または空文字を入力すると、新Runtimeバージョンの作成までで停止します。既存のDEFAULT Endpointは変更されません。
+公開スクリプトはRuntimeの環境変数マップを上記3項目で管理します。将来、MemoryやGatewayなどの追加設定を環境変数で渡す場合は、その変数を公開スクリプトの `environmentVariables` に追加してから更新します。
+
+`-Execute` を指定していても、Endpoint切り替え確認で別の値または空文字を入力すると、新Runtimeバージョンの作成までで停止します。`DEFAULT`はAgentCoreにより新Versionへ自動更新されますが、本番用`PROD`は旧Versionのまま維持されます。
 
 ## ヘルスチェックとスモークテスト
 
@@ -406,8 +449,12 @@ dry-runの内容を確認した後、`-Execute` を付けます。
 
 - Runtime Endpointの状態が `READY`
 - `liveVersion` が期待する新バージョン
-- DEFAULT Endpointへの `InvokeAgentRuntime` が成功
+- `PROD` Endpointへの `InvokeAgentRuntime` が成功
 - 応答が期待するJSON契約を満たす
+  - `status=success`
+  - 空でない `response`
+  - `execution_mode=READ_ONLY`
+  - `write_operations_performed=false`
 
 公開処理から独立して再試験する場合は次のように実行します。
 
@@ -417,7 +464,7 @@ dry-runの内容を確認した後、`-Execute` を付けます。
   -AWS_REGION ap-northeast-1 `
   -AgentRuntimeId <runtime-id> `
   -AgentRuntimeArn <runtime-arn> `
-  -EndpointName DEFAULT `
+  -EndpointName PROD `
   -ExpectedRuntimeVersion <version>
 ```
 
@@ -430,6 +477,7 @@ dry-runの内容を確認した後、`-Execute` を付けます。
 - GitコミットSHAとイメージタグ
 - ECRイメージURI、digest、digest URI
 - AWS Account、Region、実行者ARN
+- Bedrockモデルまたはinference profile ID
 - Agent Runtime ID、ARN、新Runtimeバージョン
 - Endpoint名、旧バージョン、新liveVersion
 - スモークテスト結果
@@ -447,7 +495,7 @@ dry-runの内容を確認した後、`-Execute` を付けます。
 ```powershell
 aws bedrock-agentcore-control update-agent-runtime-endpoint `
   --agent-runtime-id "<runtime-id>" `
-  --endpoint-name "DEFAULT" `
+  --endpoint-name "PROD" `
   --agent-runtime-version "<旧version>" `
   --profile "<SSOプロファイル名>" `
   --region "<region>" `

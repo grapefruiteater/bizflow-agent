@@ -19,9 +19,11 @@ AgentCore Runtimeのデプロイ方式:
 - イメージをAmazon ECRへpushする
 - agentRuntimeArtifact.containerConfiguration.containerUriにECR URIを指定する
 - UpdateAgentRuntimeで新しいRuntimeバージョンを作成する
-- RuntimeがREADYになってからDEFAULTエンドポイントを新バージョンへ切り替える
+- UpdateAgentRuntimeではmetadataConfiguration.requireMMDSV2をtrueにする
+- DEFAULTエンドポイントはAgentCoreが自動的に最新バージョンへ更新するため、本番トラフィックには使用しない
+- RuntimeがREADYになってからPRODカスタムエンドポイントを新バージョンへ切り替える
 - 更新後にヘルスチェックとスモークテストを行う
-- 失敗した場合はDEFAULTエンドポイントを旧バージョンへ戻せるようにする
+- 失敗した場合はPRODエンドポイントを旧バージョンへ戻せるようにする
 
 イメージ管理:
 - latestタグを使用しない
@@ -33,7 +35,7 @@ AgentCore Runtimeのデプロイ方式:
 IaCとアプリ更新を分離する:
 - 以前のアプリやCDKスタックで作成したAWSリソースは再利用しない
 - 今回のBizFlowアプリ専用のCDKスタックとAWSリソースを新規作成する
-- 初期構築は基盤作成、初回イメージpush、初期Runtime/DEFAULTエンドポイント作成の順に行う
+- 初期構築は基盤作成、初回イメージpush、初期Runtime/PRODエンドポイント作成の順に行う
 - CDKはECR、IAMロール、ログ、ネットワーク、初期Runtimeなどの基盤作成に使用する
 - 通常のエージェント更新ではcdk deployを実行しない
 - 通常更新はDocker build、ECR push、UpdateAgentRuntime、Endpoint更新で行う
@@ -57,7 +59,7 @@ publish-agentcore.ps1の要件:
 8. デフォルトではdry-runにする
 9. -Execute指定時のみUpdateAgentRuntimeを実行する
 10. 作成されたRuntimeバージョンがREADYになるまで待機する
-11. 明示的な確認後にDEFAULTエンドポイントを更新する
+11. 明示的な確認後にPRODエンドポイントを更新する
 12. スモークテストを実行する
 13. 旧バージョンへ戻すためのコマンドを最後に表示する
 
@@ -67,4 +69,4 @@ UpdateAgentRuntimeではroleArnとnetworkConfigurationも必要になるため�
 値をソースコードへ直接埋め込まないでください。
 
 最初は実装計画だけを提示してください。
-まだDocker push、UpdateAgentRuntime、CDK deployなどのAWS変更操作は実行しないでください。
+ソース実装とローカルテストは許可なしに実施してよい。Docker push、UpdateAgentRuntime、CDK deployなどのAWS変更操作はCodexから実行しない。

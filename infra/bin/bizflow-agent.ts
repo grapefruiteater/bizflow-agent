@@ -26,12 +26,19 @@ Tags.of(foundationStack).add("ManagedBy", "AWS-CDK");
 
 const imageDigest = app.node.tryGetContext("agentImageDigest") as string | undefined;
 if (imageDigest !== undefined && imageDigest.trim().length > 0) {
+  const bedrockModelId = app.node.tryGetContext("bedrockModelId") as string | undefined;
+  if (bedrockModelId === undefined || bedrockModelId.trim().length === 0) {
+    throw new Error(
+      "CDK context 'bedrockModelId' is required when 'agentImageDigest' is specified.",
+    );
+  }
   const runtimeStack = new BizFlowAgentRuntimeStack(app, "BizFlowAgentRuntimeStack", {
     env: deploymentEnvironment,
     description: "Initial Amazon Bedrock AgentCore Runtime for BizFlow Agent",
     environmentName,
     executionRole: foundationStack.runtimeExecutionRole,
     imageDigest,
+    modelId: bedrockModelId,
     networkConfiguration: foundationStack.networkConfiguration,
     repository: foundationStack.repository,
   });

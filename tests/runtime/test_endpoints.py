@@ -8,6 +8,15 @@ from agents.bizflow import app as runtime_module
 client = TestClient(runtime_module.app)
 
 
+class FakeAnalyzer:
+    def analyze(self, prompt: str) -> str:
+        return f"Analysis result: {prompt}"
+
+
+def setup_function() -> None:
+    runtime_module._ANALYZER = FakeAnalyzer()
+
+
 def test_ping_returns_agentcore_health_contract() -> None:
     response = client.get("/ping")
 
@@ -21,8 +30,10 @@ def test_invocations_accepts_prompt() -> None:
 
     assert response.status_code == 200
     assert response.json() == {
-        "response": "BizFlow Agent received: Analyze this process",
+        "response": "Analysis result: Analyze this process",
         "status": "success",
+        "execution_mode": "READ_ONLY",
+        "write_operations_performed": False,
     }
 
 
@@ -34,6 +45,8 @@ def test_invocations_accepts_input_wrapped_prompt() -> None:
 
     assert response.status_code == 200
     assert response.json()["status"] == "success"
+    assert response.json()["execution_mode"] == "READ_ONLY"
+    assert response.json()["write_operations_performed"] is False
 
 
 def test_invocations_propagates_runtime_session_id() -> None:
@@ -71,6 +84,23 @@ def test_invocations_rejects_missing_prompt() -> None:
 
     assert response.status_code == 422
     assert "non-empty string" in response.json()["detail"]
+
+
+def test_invocations_returns_503_when_model_configuration_is_missing() -> None:
+    class MissingConfigurationAnalyzer:
+        def analyze(self, _prompt: str) -> str:
+            raise runtime_module.AgentConfigurationError("secret configuration detail")
+
+    runtime_module._ANALYZER = MissingConfigurationAnalyzer()
+
+    response = client.post("/invocations", json={"prompt": "Hello"})
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "error",
+        "message": "Runtime model configuration is unavailable.",
+    }
+    assert "secret configuration detail" not in response.text
 
 
 def test_invocations_hides_unhandled_errors(monkeypatch) -> None:

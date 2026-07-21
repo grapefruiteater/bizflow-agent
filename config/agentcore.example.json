@@ -6,5 +6,5 @@
   "AgentRuntimeNetworkConfiguration": {
     "networkMode": "PUBLIC"
   },
-  "AgentRuntimeEndpointName": "DEFAULT"
+  "AgentRuntimeEndpointName": "PROD"
 }

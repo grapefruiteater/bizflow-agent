@@ -11,12 +11,14 @@ import * as logs from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
 
 const DEFAULT_ENDPOINT_NAME = "DEFAULT";
+const PRODUCTION_ENDPOINT_NAME = "PROD";
 const IMAGE_DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 
 export interface BizFlowAgentRuntimeStackProps extends StackProps {
   readonly environmentName: string;
   readonly executionRole: iam.IRole;
   readonly imageDigest: string;
+  readonly modelId: string;
   readonly networkConfiguration: bedrockagentcore.CfnRuntime.NetworkConfigurationProperty;
   readonly repository: ecr.IRepository;
 }
@@ -35,6 +37,12 @@ export class BizFlowAgentRuntimeStack extends Stack {
         "CDK context 'agentImageDigest' must be an ECR digest in the form sha256 followed by 64 lowercase hexadecimal characters.",
       );
     }
+    const modelId = props.modelId.trim();
+    if (modelId.length === 0 || modelId.length > 5000 || /[\r\n]/.test(modelId)) {
+      throw new Error(
+        "CDK context 'bedrockModelId' must be a non-empty Bedrock model or inference profile ID without line breaks.",
+      );
+    }
 
     const imageUri = `${props.repository.repositoryUri}@${imageDigest}`;
     const runtimeNameSuffix = props.environmentName.replace(/-/g, "_");
@@ -46,6 +54,11 @@ export class BizFlowAgentRuntimeStack extends Stack {
         },
       },
       description: "BizFlow Agent HTTP runtime on port 8080",
+      environmentVariables: {
+        BIZFLOW_AWS_REGION: this.region,
+        BIZFLOW_MODEL_ID: modelId,
+        BIZFLOW_MODEL_PROVIDER: "bedrock",
+      },
       networkConfiguration: props.networkConfiguration,
       protocolConfiguration: "HTTP",
       roleArn: props.executionRole.roleArn,
@@ -57,11 +70,39 @@ export class BizFlowAgentRuntimeStack extends Stack {
     });
     runtime.applyRemovalPolicy(RemovalPolicy.RETAIN_ON_UPDATE_OR_DELETE);
 
-    const runtimeLogGroup = new logs.LogGroup(this, "RuntimeLogGroup", {
+    const defaultRuntimeLogGroup = new logs.LogGroup(this, "RuntimeLogGroup", {
       logGroupName: `/aws/bedrock-agentcore/runtimes/${runtime.attrAgentRuntimeId}-${DEFAULT_ENDPOINT_NAME}`,
       retention: logs.RetentionDays.ONE_MONTH,
       removalPolicy: RemovalPolicy.RETAIN_ON_UPDATE_OR_DELETE,
     });
+
+    const productionRuntimeLogGroup = new logs.LogGroup(
+      this,
+      "ProductionRuntimeLogGroup",
+      {
+        logGroupName: `/aws/bedrock-agentcore/runtimes/${runtime.attrAgentRuntimeId}-${PRODUCTION_ENDPOINT_NAME}`,
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: RemovalPolicy.RETAIN_ON_UPDATE_OR_DELETE,
+      },
+    );
+
+    const productionEndpoint = new bedrockagentcore.CfnRuntimeEndpoint(
+      this,
+      "ProductionEndpoint",
+      {
+        agentRuntimeId: runtime.attrAgentRuntimeId,
+        agentRuntimeVersion: runtime.attrAgentRuntimeVersion,
+        name: PRODUCTION_ENDPOINT_NAME,
+        description: "Production endpoint for explicitly promoted BizFlow Agent versions",
+        tags: {
+          Application: "BizFlowAgent",
+          Environment: props.environmentName,
+          ManagedBy: "AWS-CDK",
+        },
+      },
+    );
+    productionEndpoint.node.addDependency(productionRuntimeLogGroup);
+    productionEndpoint.applyRemovalPolicy(RemovalPolicy.RETAIN_ON_UPDATE_OR_DELETE);
 
     new CfnOutput(this, "EcrRepositoryUri", {
       value: props.repository.repositoryUri,
@@ -82,16 +123,25 @@ export class BizFlowAgentRuntimeStack extends Stack {
       value: JSON.stringify(props.networkConfiguration),
     });
     new CfnOutput(this, "AgentRuntimeEndpointName", {
-      value: DEFAULT_ENDPOINT_NAME,
+      value: PRODUCTION_ENDPOINT_NAME,
+    });
+    new CfnOutput(this, "AgentRuntimeEndpointArn", {
+      value: productionEndpoint.attrAgentRuntimeEndpointArn,
     });
     new CfnOutput(this, "RuntimeLogGroupName", {
-      value: runtimeLogGroup.logGroupName,
+      value: productionRuntimeLogGroup.logGroupName,
+    });
+    new CfnOutput(this, "DefaultRuntimeLogGroupName", {
+      value: defaultRuntimeLogGroup.logGroupName,
     });
     new CfnOutput(this, "InitialAgentImageDigest", {
       value: imageDigest,
     });
     new CfnOutput(this, "InitialAgentImageUri", {
       value: imageUri,
+    });
+    new CfnOutput(this, "InitialBedrockModelId", {
+      value: modelId,
     });
   }
 }

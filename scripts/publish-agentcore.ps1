@@ -8,6 +8,11 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$AWS_REGION,
 
+    [Parameter(Mandatory = $true)]
+    [ValidateNotNullOrEmpty()]
+    [ValidateLength(1, 5000)]
+    [string]$ModelId,
+
     [string]$ConfigPath,
 
     [string]$StackName,
@@ -206,10 +211,7 @@ function Read-DeploymentConfiguration {
     $endpointName = Get-PropertyValue -Object $values -Names @(
         "AgentRuntimeEndpointName",
         "EndpointName"
-    ) -Optional
-    if (-not $endpointName) {
-        $endpointName = "DEFAULT"
-    }
+    )
 
     return [pscustomobject]@{
         EcrRepositoryUri = [string](Get-PropertyValue -Object $values -Names @(
@@ -428,6 +430,7 @@ Write-Host "  Git commit:       $gitCommit"
 Write-Host "  Image URI:        $imageUri"
 Write-Host "  Runtime ID:       $($configuration.AgentRuntimeId)"
 Write-Host "  Endpoint:         $($configuration.EndpointName)"
+Write-Host "  Bedrock model:    $ModelId"
 Write-Host "  Network mode:     $($configuration.NetworkConfiguration.networkMode)"
 Write-Host "  Config:           $ConfigPath"
 if ($existingImageDigest) {
@@ -477,8 +480,12 @@ $record = [pscustomobject]@{
     imageDigestUri = $null
     agentRuntimeId = $configuration.AgentRuntimeId
     agentRuntimeArn = $configuration.AgentRuntimeArn
+    modelId = $ModelId
     runtimeVersion = $null
     endpointName = $configuration.EndpointName
+    metadataConfiguration = [ordered]@{
+        requireMMDSV2 = $true
+    }
     previousEndpointVersion = $null
     endpointLiveVersion = $null
     smokeTest = "NOT_RUN"
@@ -547,6 +554,14 @@ try {
         }
         roleArn = $configuration.RoleArn
         networkConfiguration = $configuration.NetworkConfiguration
+        environmentVariables = @{
+            BIZFLOW_MODEL_ID = $ModelId
+            BIZFLOW_AWS_REGION = $AWS_REGION
+            BIZFLOW_MODEL_PROVIDER = "bedrock"
+        }
+        metadataConfiguration = @{
+            requireMMDSV2 = $true
+        }
         clientToken = $clientToken
     }
     $updateRequestPath = Join-Path $tempDirectory "update-agent-runtime.json"

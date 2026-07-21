@@ -18,7 +18,7 @@ param(
 
     [Parameter(ParameterSetName = "Remote")]
     [ValidateNotNullOrEmpty()]
-    [string]$EndpointName = "DEFAULT",
+    [string]$EndpointName = "PROD",
 
     [Parameter(Mandatory = $true, ParameterSetName = "Remote")]
     [ValidatePattern('^[1-9][0-9]{0,4}$')]
@@ -84,6 +84,13 @@ function Assert-SmokeResponse {
     }
     if (-not $Response.response -or -not ($Response.response -is [string])) {
         throw "Invocation response did not contain a non-empty string field named 'response'."
+    }
+    if ([string]$Response.execution_mode -ne "READ_ONLY") {
+        throw "Invocation response did not report execution_mode=READ_ONLY."
+    }
+    if ($null -eq $Response.PSObject.Properties["write_operations_performed"] -or
+        [bool]$Response.write_operations_performed) {
+        throw "Invocation response did not confirm that no write operation was performed."
     }
 }
 

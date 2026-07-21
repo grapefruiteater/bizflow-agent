@@ -7,6 +7,12 @@ from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
+
+try:
+    from .bizflow_agent import AgentConfigurationError, BizFlowAnalyzer
+except ImportError:  # The container starts this module directly from /app.
+    from bizflow_agent import AgentConfigurationError, BizFlowAnalyzer
 
 LOGGER = logging.getLogger("bizflow.runtime")
 logging.basicConfig(
@@ -16,19 +22,22 @@ logging.basicConfig(
 
 app = FastAPI(
     title="BizFlow Agent Runtime",
-    version="0.1.0",
+    version="0.2.0",
     docs_url=None,
     redoc_url=None,
 )
 
+_ANALYZER = BizFlowAnalyzer()
+
+
+def get_analyzer() -> BizFlowAnalyzer:
+    """Return the analyzer; kept replaceable for AWS-free local tests."""
+
+    return _ANALYZER
+
 
 def handle_invocation(payload: dict[str, Any], session_id: str | None) -> dict[str, Any]:
-    """Run one BizFlow request.
-
-    This is the narrow adapter where the business agent implementation will be
-    connected. Keeping the AgentCore HTTP contract outside that implementation
-    lets the transport be tested without AWS access.
-    """
+    """Validate and run one read-only BizFlow analysis request."""
 
     prompt = payload.get("prompt")
     if prompt is None and isinstance(payload.get("input"), dict):
@@ -39,9 +48,12 @@ def handle_invocation(payload: dict[str, Any], session_id: str | None) -> dict[s
             detail="The request body must contain a non-empty string field named 'prompt'.",
         )
 
+    response_text = get_analyzer().analyze(prompt.strip())
     result: dict[str, Any] = {
-        "response": f"BizFlow Agent received: {prompt.strip()}",
+        "response": response_text,
         "status": "success",
+        "execution_mode": "READ_ONLY",
+        "write_operations_performed": False,
     }
     if session_id:
         result["session_id"] = session_id
@@ -77,7 +89,18 @@ async def invocations(
         "Invocation received session_id=%s",
         runtime_session_id or "not-provided",
     )
-    return JSONResponse(handle_invocation(payload, runtime_session_id))
+    try:
+        result = await run_in_threadpool(handle_invocation, payload, runtime_session_id)
+    except AgentConfigurationError:
+        LOGGER.error("Runtime model configuration is missing or invalid.")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "error",
+                "message": "Runtime model configuration is unavailable.",
+            },
+        )
+    return JSONResponse(result)
 
 
 @app.exception_handler(Exception)

@@ -394,10 +394,11 @@ $repositoryResult = Invoke-AwsJson -Arguments @(
     "ecr", "describe-repositories",
     "--repository-names", $ecr.RepositoryName
 )
-$repository = @($repositoryResult.repositories)[0]
-if ($null -eq $repository) {
-    throw "ECR repository was not returned: $($ecr.RepositoryName)"
+$repositories = @($repositoryResult.repositories)
+if ($repositories.Count -ne 1) {
+    throw "Expected one ECR repository but received $($repositories.Count): $($ecr.RepositoryName)"
 }
+$repository = $repositories[0]
 if ([string]$repository.imageTagMutability -ne "IMMUTABLE") {
     throw "ECR repository must use imageTagMutability=IMMUTABLE. Current value: $($repository.imageTagMutability)"
 }
@@ -412,7 +413,19 @@ $existingImageResult = Invoke-AwsJson -Arguments @(
     "--repository-name", $ecr.RepositoryName,
     "--image-ids", "imageTag=$imageTag"
 )
-$existingImage = @($existingImageResult.images)[0]
+$existingImages = @($existingImageResult.images)
+if ($existingImages.Count -gt 1) {
+    throw "ECR returned more than one image for tag '$imageTag'."
+}
+$unexpectedImageFailures = @(
+    @($existingImageResult.failures) |
+        Where-Object { [string]$_.failureCode -ne "ImageNotFound" }
+)
+if ($unexpectedImageFailures.Count -gt 0) {
+    $failureCodes = @($unexpectedImageFailures | ForEach-Object { [string]$_.failureCode }) -join ", "
+    throw "ECR batch-get-image failed for tag '$imageTag': $failureCodes"
+}
+$existingImage = if ($existingImages.Count -eq 1) { $existingImages[0] } else { $null }
 $existingImageDigest = $null
 if ($null -ne $existingImage) {
     $existingImageDigest = [string]$existingImage.imageId.imageDigest

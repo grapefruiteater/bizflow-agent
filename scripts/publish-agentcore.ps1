@@ -81,7 +81,14 @@ function Invoke-NativeText {
     finally {
         $ErrorActionPreference = $previousErrorActionPreference
     }
-    $text = ($outputLines | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine
+    $text = ($outputLines | ForEach-Object {
+        if ($_ -is [System.Management.Automation.ErrorRecord]) {
+            $_.Exception.Message
+        }
+        else {
+            $_.ToString()
+        }
+    }) -join [Environment]::NewLine
     if ($exitCode -ne 0) {
         throw "Command failed with exit code ${exitCode}: $Command`n$text"
     }
@@ -260,12 +267,14 @@ function Wait-AgentRuntimeReady {
             "--agent-runtime-id", $AgentRuntimeId,
             "--agent-runtime-version", $AgentRuntimeVersion
         )
-        Write-Host "Runtime version $AgentRuntimeVersion status: $($runtime.status)"
-        if ($runtime.status -eq "READY") {
+        $runtimeStatus = [string](Get-PropertyValue -Object $runtime -Names @("status"))
+        Write-Host "Runtime version $AgentRuntimeVersion status: $runtimeStatus"
+        if ($runtimeStatus -eq "READY") {
             return $runtime
         }
-        if ($runtime.status -in @("CREATE_FAILED", "UPDATE_FAILED", "DELETING")) {
-            throw "Runtime version $AgentRuntimeVersion entered $($runtime.status): $($runtime.failureReason)"
+        if ($runtimeStatus -in @("CREATE_FAILED", "UPDATE_FAILED", "DELETING")) {
+            $failureReason = [string](Get-PropertyValue -Object $runtime -Names @("failureReason") -Optional)
+            throw "Runtime version $AgentRuntimeVersion entered ${runtimeStatus}: $failureReason"
         }
         Start-Sleep -Seconds $PollIntervalSeconds
     }
@@ -295,12 +304,18 @@ function Wait-AgentRuntimeEndpointReady {
     $deadline = [DateTimeOffset]::UtcNow.AddSeconds($TimeoutSeconds)
     while ([DateTimeOffset]::UtcNow -lt $deadline) {
         $endpoint = Get-AgentRuntimeEndpoint -AgentRuntimeId $AgentRuntimeId -EndpointName $EndpointName
-        Write-Host "Endpoint $EndpointName status: $($endpoint.status), liveVersion: $($endpoint.liveVersion), targetVersion: $($endpoint.targetVersion)"
-        if ($endpoint.status -eq "READY" -and "$($endpoint.liveVersion)" -eq $ExpectedVersion) {
+        $endpointStatus = [string](Get-PropertyValue -Object $endpoint -Names @("status"))
+        $liveVersion = [string](Get-PropertyValue -Object $endpoint -Names @("liveVersion") -Optional)
+        $targetVersion = [string](Get-PropertyValue -Object $endpoint -Names @("targetVersion") -Optional)
+        $liveVersionDisplay = if ($liveVersion) { $liveVersion } else { "not-reported" }
+        $targetVersionDisplay = if ($targetVersion) { $targetVersion } else { "not-reported" }
+        Write-Host "Endpoint $EndpointName status: $endpointStatus, liveVersion: $liveVersionDisplay, targetVersion: $targetVersionDisplay"
+        if ($endpointStatus -eq "READY" -and $liveVersion -eq $ExpectedVersion) {
             return $endpoint
         }
-        if ($endpoint.status -in @("CREATE_FAILED", "UPDATE_FAILED", "DELETING")) {
-            throw "Endpoint $EndpointName entered $($endpoint.status)."
+        if ($endpointStatus -in @("CREATE_FAILED", "UPDATE_FAILED", "DELETING")) {
+            $failureReason = [string](Get-PropertyValue -Object $endpoint -Names @("failureReason") -Optional)
+            throw "Endpoint $EndpointName entered ${endpointStatus}: $failureReason"
         }
         Start-Sleep -Seconds $PollIntervalSeconds
     }
@@ -546,10 +561,11 @@ try {
     $recordPath = Write-DeploymentRecord -Record $record -Directory $DeploymentRecordDirectory -FileName $recordFileName
 
     $currentEndpoint = Get-AgentRuntimeEndpoint -AgentRuntimeId $configuration.AgentRuntimeId -EndpointName $configuration.EndpointName
-    if ($currentEndpoint.status -ne "READY") {
-        throw "Endpoint $($configuration.EndpointName) must be READY before an update. Current status: $($currentEndpoint.status)"
+    $currentEndpointStatus = [string](Get-PropertyValue -Object $currentEndpoint -Names @("status"))
+    if ($currentEndpointStatus -ne "READY") {
+        throw "Endpoint $($configuration.EndpointName) must be READY before an update. Current status: $currentEndpointStatus"
     }
-    $previousVersion = [string]$currentEndpoint.liveVersion
+    $previousVersion = [string](Get-PropertyValue -Object $currentEndpoint -Names @("liveVersion") -Optional)
     if (-not $previousVersion) {
         throw "The current endpoint did not report liveVersion."
     }
@@ -620,7 +636,7 @@ try {
         $recordPath = Write-DeploymentRecord -Record $record -Directory $DeploymentRecordDirectory -FileName $recordFileName
 
         $readyEndpoint = Wait-AgentRuntimeEndpointReady -AgentRuntimeId $configuration.AgentRuntimeId -EndpointName $configuration.EndpointName -ExpectedVersion $newRuntimeVersion
-        $record.endpointLiveVersion = [string]$readyEndpoint.liveVersion
+        $record.endpointLiveVersion = [string](Get-PropertyValue -Object $readyEndpoint -Names @("liveVersion"))
         $record.status = "ENDPOINT_READY"
         $recordPath = Write-DeploymentRecord -Record $record -Directory $DeploymentRecordDirectory -FileName $recordFileName
 

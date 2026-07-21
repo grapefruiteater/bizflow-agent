@@ -559,6 +559,7 @@ aws bedrock-agentcore-control update-agent-runtime-endpoint `
 - `UpdateAgentRuntime` が失敗した場合: デプロイ記録の `failure` と対象Runtimeの失敗理由を確認する。
 - Runtimeが `READY` にならない場合: AgentCore RuntimeのCloudWatch Logsでコンテナ起動、ポート8080、ARM64、IAM/ECR pull権限を確認する。
 - Endpoint更新が失敗した場合: 旧 `liveVersion` が引き続き稼働しているか確認する。
+- Endpoint更新APIの成功後に待機処理だけが失敗した場合: 同じGit SHAタグはECRへpush済みなので、公開スクリプトを再実行しない。AgentCoreコンソールで`PROD`の状態と`liveVersion`を確認し、期待Versionが`READY`なら`smoke-test-agentcore.ps1`をそのVersionへ直接実行する。ロールバックはEndpointまたはスモークテストが失敗した場合にだけ検討する。
 - スモークテストが失敗した場合: ロールバックコマンドを利用できる状態を維持し、Runtimeログと呼び出し応答を確認する。
 - 同じSHAタグが既に存在する場合: スクリプトはDocker build/push前に停止する。既存タグを上書きせず、変更をコミットして新しいGit SHAで公開する。初期Runtimeが既にそのイメージを使用しているだけなら、同じコミットを通常更新として再公開する必要はない。
 

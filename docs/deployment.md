@@ -267,6 +267,7 @@ npx cdk deploy BizFlowAgentFoundationStack `
 agents/bizflow/
   app.py
   bizflow_agent.py
+  business_data.py
   Dockerfile
   .dockerignore
   requirements.txt
@@ -275,6 +276,9 @@ config/
   agentcore.example.json
   foundation-outputs.json  # Foundation deploy時に生成
   cdk-outputs.json         # Runtime deploy時に生成
+docs/
+  business-analysis.md
+  deployment.md
 infra/
   bin/bizflow-agent.ts
   lib/foundation-stack.ts
@@ -286,6 +290,7 @@ scripts/
   smoke-test-agentcore.ps1
 tests/runtime/
   test_bizflow_agent.py
+  test_business_data.py
   test_endpoints.py
 deployments/agentcore/
   <実行時に生成されるデプロイ記録>.json
@@ -337,7 +342,7 @@ python -m pip install --requirement .\agents\bizflow\requirements-dev.txt
 python -m pytest .\tests\runtime
 ```
 
-このテストはAWSへ接続しません。`GET /ping`、`POST /invocations`、入力検証、Runtime session ID、モデル設定、読み取り専用分析の依存注入をローカルで検証します。
+このテストはAWSへ接続しません。`GET /ping`、`POST /invocations`、入力検証、Runtime session ID、モデル設定、構造化された問い合わせの決定的な判定、読み取り専用分析の依存注入をローカルで検証します。入力契約は [`business-analysis.md`](business-analysis.md) を参照してください。
 
 ## コンテナのローカル検証
 

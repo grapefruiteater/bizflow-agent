@@ -61,6 +61,113 @@ def test_invocations_propagates_runtime_session_id() -> None:
     assert response.json()["session_id"] == session_id
 
 
+def test_invocations_analyzes_structured_business_data() -> None:
+    class CapturingAnalyzer:
+        def __init__(self) -> None:
+            self.prompt = ""
+
+        def analyze(self, prompt: str) -> str:
+            self.prompt = prompt
+            return "期限超過のINQ-001を最優先にしてください。"
+
+    analyzer = CapturingAnalyzer()
+    runtime_module._ANALYZER = analyzer
+    response = client.post(
+        "/invocations",
+        json={
+            "prompt": "問い合わせを分析してください。",
+            "business_data": {
+                "as_of": "2026-07-21T10:00:00+09:00",
+                "inquiries": [
+                    {
+                        "inquiry_id": "INQ-001",
+                        "summary": "期限超過",
+                        "received_at": "2026-07-20T09:00:00+09:00",
+                        "due_at": "2026-07-21T09:00:00+09:00",
+                        "priority": "URGENT",
+                        "status": "OPEN",
+                    }
+                ],
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["response"] == "期限超過のINQ-001を最優先にしてください。"
+    assert response.json()["analysis_context"] == {
+        "as_of": "2026-07-21T10:00:00+09:00",
+        "total_inquiries": 1,
+        "active_inquiries": 1,
+        "overdue_inquiry_ids": ["INQ-001"],
+        "urgent_inquiry_ids": ["INQ-001"],
+        "due_within_24_hours_inquiry_ids": [],
+    }
+    assert '"inquiry_id":"INQ-001"' in analyzer.prompt
+    assert '"overdue":true' in analyzer.prompt
+
+
+def test_invocations_accepts_business_data_inside_input() -> None:
+    response = client.post(
+        "/invocations",
+        json={
+            "input": {
+                "prompt": "問い合わせを分析してください。",
+                "business_data": {
+                    "as_of": "2026-07-21T10:00:00+09:00",
+                    "inquiries": [
+                        {
+                            "inquiry_id": "INQ-001",
+                            "summary": "通常問い合わせ",
+                            "received_at": "2026-07-21T09:00:00+09:00",
+                        }
+                    ],
+                },
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["analysis_context"]["total_inquiries"] == 1
+
+
+def test_invocations_rejects_invalid_business_data_without_echoing_input() -> None:
+    sensitive_summary = "customer-sensitive-value"
+    response = client.post(
+        "/invocations",
+        json={
+            "prompt": "問い合わせを分析してください。",
+            "business_data": {
+                "as_of": "2026-07-21T10:00:00",
+                "inquiries": [
+                    {
+                        "inquiry_id": "INQ-001",
+                        "summary": sensitive_summary,
+                        "received_at": "2026-07-21T09:00:00+09:00",
+                    }
+                ],
+            },
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["message"] == "business_data is invalid."
+    assert sensitive_summary not in response.text
+
+
+def test_invocations_rejects_duplicate_business_data_locations() -> None:
+    response = client.post(
+        "/invocations",
+        json={
+            "prompt": "分析してください。",
+            "business_data": {},
+            "input": {"business_data": {}},
+        },
+    )
+
+    assert response.status_code == 422
+    assert "not both" in response.json()["detail"]
+
+
 def test_invocations_rejects_invalid_json() -> None:
     response = client.post(
         "/invocations",

@@ -16,7 +16,9 @@ AgentCore Runtimeが要求する次のHTTP Endpointを実装しています。
 - ポート：`8080`
 - コンテナ：`linux/arm64`
 
-`POST /invocations` はStrands AgentsとAmazon Bedrockモデルを使う、読み取り専用の業務分析へ接続されています。現段階では入力された情報だけを分析し、AWSデータの読み取り、タスク登録、データ更新、外部送信は行いません。書き込み可能なツールも渡していません。モデルIDはソースへ固定せず、Runtime環境変数 `BIZFLOW_MODEL_ID` から取得します。
+`POST /invocations` はStrands AgentsとAmazon Bedrockモデルを使う、読み取り専用の業務分析へ接続されています。自由文に加え、構造化された問い合わせ一覧を受け取り、期限超過・緊急・24時間以内期限をPython側で決定的に判定できます。LLMはその判定結果と問い合わせIDを根拠に、要約と対応案を作成します。入力形式と判定規則は [`docs/business-analysis.md`](docs/business-analysis.md) を参照してください。
+
+現段階では呼び出し元が渡した情報だけを分析し、AWSデータの読み取り、タスク登録、データ更新、外部送信は行いません。書き込み可能なツールも渡していません。モデルIDはソースへ固定せず、Runtime環境変数 `BIZFLOW_MODEL_ID` から取得します。
 
 採用モデルはAmazon Nova 2 LiteのJP地理推論profileです。
 
@@ -35,6 +37,7 @@ bizflow-agent/
 │       ├── __init__.py
 │       ├── app.py
 │       ├── bizflow_agent.py
+│       ├── business_data.py
 │       ├── Dockerfile
 │       ├── .dockerignore
 │       ├── requirements.txt
@@ -43,6 +46,7 @@ bizflow-agent/
 │   ├── agentcore.example.json
 │   └── cdk-outputs.json          # BizFlow専用CDKが実行時に生成
 ├── docs/
+│   ├── business-analysis.md
 │   └── deployment.md
 ├── infra/
 │   ├── bin/
@@ -59,6 +63,7 @@ bizflow-agent/
 ├── tests/
 │   └── runtime/
 │       ├── test_bizflow_agent.py
+│       ├── test_business_data.py
 │       └── test_endpoints.py
 ├── .gitignore
 ├── cdk.json
@@ -79,8 +84,9 @@ bizflow-agent/
 |---|---|
 | `agents/__init__.py` | `agents` をPythonパッケージとして扱うための初期化ファイルです。 |
 | `agents/bizflow/__init__.py` | BizFlow Runtimeパッケージの初期化ファイルです。 |
-| `agents/bizflow/app.py` | FastAPIによるAgentCore HTTP Runtimeです。`/ping`、`/invocations`、入力検証、Runtime session IDヘッダーの受け渡し、内部エラーのマスキングを実装しています。 |
+| `agents/bizflow/app.py` | FastAPIによるAgentCore HTTP Runtimeです。`/ping`、`/invocations`、自由文・構造化業務データの入力検証、Runtime session IDヘッダーの受け渡し、内部エラーのマスキングを実装しています。 |
 | `agents/bizflow/bizflow_agent.py` | Strands Agent、Bedrockモデル設定、読み取り専用システムプロンプトを実装します。モデルは呼び出しごとに会話履歴を持たない形で生成し、ツールは一切公開しません。ローカルコンテナ検証専用の決定的な `local-test` providerも含みます。 |
+| `agents/bizflow/business_data.py` | 問い合わせスナップショットを検証し、期限超過・緊急・24時間以内期限を`as_of`基準で決定的に計算します。計算結果と根拠データをLLM向けコンテキストへ変換します。 |
 | `agents/bizflow/Dockerfile` | Python 3.12ベースのRuntimeイメージを作成します。ポート8080を公開し、非rootユーザー `app` でUvicornを起動します。 |
 | `agents/bizflow/.dockerignore` | Git情報、仮想環境、テスト、ドキュメント、ローカル設定などをDocker build contextから除外します。 |
 | `agents/bizflow/requirements.txt` | Runtimeで必要なFastAPI、Uvicorn、Strands Agentsの固定バージョンを定義します。 |
@@ -94,6 +100,7 @@ bizflow-agent/
 | `config/cdk-outputs.json` | BizFlow専用スタックのdeploy後に生成する環境固有ファイルです。Git管理せず、公開スクリプトの入力として使用します。 |
 | `scripts/publish-agentcore.ps1` | Git SHAタグによるARM64イメージ公開とAgentCore Runtime更新を行います。デフォルトはdry-runで、`-Execute` 指定時のみbuild/pushとRuntime更新へ進みます。 |
 | `scripts/smoke-test-agentcore.ps1` | ローカルコンテナまたはAgentCore上の`PROD` Endpointを検証します。リモートではEndpoint状態・liveVersion・実呼び出しを確認します。 |
+| `docs/business-analysis.md` | 構造化された問い合わせ分析の入力項目、決定的な判定規則、応答契約、リクエスト例を説明します。 |
 | `docs/deployment.md` | Windowsネイティブ環境の準備、CDK Outputs契約、dry-run、公開、ヘルスチェック、デプロイ記録、ロールバックの詳細手順です。 |
 
 ### CDK基盤
@@ -128,8 +135,9 @@ bizflow-agent/
 
 | ファイル | 説明 |
 |---|---|
-| `tests/runtime/test_endpoints.py` | `/ping`、`/invocations`、入力エラー、session ID、内部エラー応答をAWS接続なしで検証するpytestです。 |
+| `tests/runtime/test_endpoints.py` | `/ping`、`/invocations`、構造化データ、入力エラー、session ID、内部エラー応答をAWS接続なしで検証するpytestです。 |
 | `tests/runtime/test_bizflow_agent.py` | Runtime設定、ローカルテストprovider、依存注入した分析処理、空応答の拒否をAWS接続なしで検証するpytestです。 |
+| `tests/runtime/test_business_data.py` | 期限超過などの業務判定と、タイムゾーン、重複ID、日時前後関係の境界条件を検証するpytestです。 |
 | `.gitignore` | 仮想環境、Pythonキャッシュ、CDK成果物、環境別CDK Outputs、生成したデプロイ記録をGit管理対象から除外します。 |
 | `bizflow_agent_architecture.drawio` | BizFlow AgentのAWS全体構成と処理フローを示すdraw.io構成図です。 |
 | `プロンプト.txt` | 開発環境、コンテナ方式、イメージ管理、IaCと通常更新の分離方針を記録しています。 |

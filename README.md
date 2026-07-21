@@ -18,6 +18,13 @@ AgentCore Runtimeが要求する次のHTTP Endpointを実装しています。
 
 `POST /invocations` はStrands AgentsとAmazon Bedrockモデルを使う、読み取り専用の業務分析へ接続されています。現段階では入力された情報だけを分析し、AWSデータの読み取り、タスク登録、データ更新、外部送信は行いません。書き込み可能なツールも渡していません。モデルIDはソースへ固定せず、Runtime環境変数 `BIZFLOW_MODEL_ID` から取得します。
 
+採用モデルはAmazon Nova 2 LiteのJP地理推論profileです。
+
+- Runtime `ModelId`: `jp.amazon.nova-2-lite-v1:0`
+- Foundation model: `amazon.nova-2-lite-v1:0`
+- Source Region: `ap-northeast-1`
+- Destination Regions: `ap-northeast-1`, `ap-northeast-3`
+
 ## ファイル構成
 
 ```text
@@ -93,8 +100,8 @@ bizflow-agent/
 
 | ファイル | 説明 |
 |---|---|
-| `infra/bin/bizflow-agent.ts` | CDKアプリのエントリーポイントです。常にFoundation Stackを定義し、`agentImageDigest` と `bedrockModelId` contextがある場合だけRuntime Stackも定義します。 |
-| `infra/lib/foundation-stack.ts` | BizFlow専用ECR、AgentCore実行IAMロール、`PUBLIC`ネットワーク設定を作成します。ECRは不変タグ、push時scan、Retainを設定します。 |
+| `infra/bin/bizflow-agent.ts` | CDKアプリのエントリーポイントです。モデルprofile、基盤モデル、送信先リージョンをCDK contextから読み、`agentImageDigest`がある場合だけRuntime Stackも定義します。 |
+| `infra/lib/foundation-stack.ts` | BizFlow専用ECR、AgentCore実行IAMロール、`PUBLIC`ネットワーク設定を作成します。Bedrock権限は指定profileとその送信先にある指定foundation modelへ限定します。 |
 | `infra/lib/runtime-stack.ts` | digest固定の初回コンテナからAgentCore Runtime、`PROD`カスタムEndpoint、Endpoint別の30日保持ロググループ、通常更新用Outputsを作成します。`DEFAULT` EndpointはRuntime作成時にAgentCoreが自動作成します。 |
 | `infra/test/foundation-stack.test.ts` | ECRとIAM、およびFoundation OutputsのCloudFormation定義を検証します。 |
 | `infra/test/runtime-stack.test.ts` | Runtime、Endpoint、ログ、Outputsを検証し、タグや不正なdigestを拒否することを確認します。 |
@@ -136,6 +143,8 @@ bizflow-agent/
 1. `BizFlowAgentFoundationStack` を新規deployする。
    - BizFlow専用ECRリポジトリ
    - AgentCore Runtime実行IAMロール
+     - `jp.amazon.nova-2-lite-v1:0` profile
+     - 東京・大阪の `amazon.nova-2-lite-v1:0`
    - Runtimeログ、メトリクス、トレースに必要なIAM権限
    - `PUBLIC`ネットワーク設定
 2. 作成した専用ECRへ、最初の `linux/arm64` イメージをGit SHAタグでpushする。
@@ -220,11 +229,11 @@ BizFlow専用基盤の初期構築が完了した後、通常更新では最初�
 .\scripts\publish-agentcore.ps1 `
   -AWS_PROFILE <SSOプロファイル名> `
   -AWS_REGION <AWSリージョン> `
-  -ModelId <Bedrockモデルまたはinference-profile-ID> `
+  -ModelId jp.amazon.nova-2-lite-v1:0 `
   -ConfigPath .\config\cdk-outputs.json `
   -StackName BizFlowAgentRuntimeStack
 ```
 
-`ModelId` には、対象リージョンで利用でき、Runtime実行ロールが `bedrock:InvokeModel` を許可しているモデルIDまたはinference profile IDを指定します。例示値をそのまま使わず、採用モデルを明示的に決定してください。
+`ModelId` は採用済みのJP地理推論profileを明示します。既存環境では、この通常更新より先にFoundation StackのBedrock IAM権限を一度だけ更新する必要があります。具体的なcontextと確認順序は [`docs/deployment.md`](docs/deployment.md) に記載しています。
 
 `publish-agentcore.ps1` はAWS基盤を作成しません。初期基盤はBizFlow専用CDKスタックで新規作成し、通常更新時には `cdk deploy` を実行しません。詳細は [`docs/deployment.md`](docs/deployment.md) を参照してください。

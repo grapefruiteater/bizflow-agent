@@ -5,6 +5,7 @@ import { BizFlowAgentRuntimeStack } from "../lib/runtime-stack";
 
 const app = new App();
 const environmentName = readEnvironmentName(app);
+const bedrockModelAccess = readBedrockModelAccess(app);
 const deploymentEnvironment: Environment = {
   account: process.env.CDK_DEFAULT_ACCOUNT,
   region: process.env.CDK_DEFAULT_REGION,
@@ -16,6 +17,7 @@ const foundationStack = new BizFlowAgentFoundationStack(
   {
     env: deploymentEnvironment,
     description: "Dedicated ECR and IAM foundation for the BizFlow AgentCore Runtime",
+    bedrockModelAccess,
     environmentName,
   },
 );
@@ -26,10 +28,9 @@ Tags.of(foundationStack).add("ManagedBy", "AWS-CDK");
 
 const imageDigest = app.node.tryGetContext("agentImageDigest") as string | undefined;
 if (imageDigest !== undefined && imageDigest.trim().length > 0) {
-  const bedrockModelId = app.node.tryGetContext("bedrockModelId") as string | undefined;
-  if (bedrockModelId === undefined || bedrockModelId.trim().length === 0) {
+  if (bedrockModelAccess === undefined) {
     throw new Error(
-      "CDK context 'bedrockModelId' is required when 'agentImageDigest' is specified.",
+      "Bedrock model access contexts are required when 'agentImageDigest' is specified.",
     );
   }
   const runtimeStack = new BizFlowAgentRuntimeStack(app, "BizFlowAgentRuntimeStack", {
@@ -38,7 +39,7 @@ if (imageDigest !== undefined && imageDigest.trim().length > 0) {
     environmentName,
     executionRole: foundationStack.runtimeExecutionRole,
     imageDigest,
-    modelId: bedrockModelId,
+    modelId: bedrockModelAccess.inferenceProfileId,
     networkConfiguration: foundationStack.networkConfiguration,
     repository: foundationStack.repository,
   });
@@ -59,4 +60,40 @@ function readEnvironmentName(cdkApp: App): string {
     );
   }
   return value;
+}
+
+function readBedrockModelAccess(cdkApp: App):
+  | {
+      destinationRegions: string[];
+      foundationModelId: string;
+      inferenceProfileId: string;
+    }
+  | undefined {
+  const inferenceProfileId = String(
+    cdkApp.node.tryGetContext("bedrockModelId") ?? "",
+  ).trim();
+  const foundationModelId = String(
+    cdkApp.node.tryGetContext("bedrockFoundationModelId") ?? "",
+  ).trim();
+  const destinationRegionsValue = String(
+    cdkApp.node.tryGetContext("bedrockModelDestinationRegions") ?? "",
+  ).trim();
+
+  if (!inferenceProfileId && !foundationModelId && !destinationRegionsValue) {
+    return undefined;
+  }
+  if (!inferenceProfileId || !foundationModelId || !destinationRegionsValue) {
+    throw new Error(
+      "CDK contexts 'bedrockModelId', 'bedrockFoundationModelId', and 'bedrockModelDestinationRegions' must be specified together.",
+    );
+  }
+
+  return {
+    inferenceProfileId,
+    foundationModelId,
+    destinationRegions: destinationRegionsValue
+      .split(",")
+      .map((region) => region.trim())
+      .filter(Boolean),
+  };
 }

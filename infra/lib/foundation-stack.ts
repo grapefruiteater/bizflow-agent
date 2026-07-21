@@ -9,7 +9,14 @@ import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as iam from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
 
+export interface BedrockModelAccessConfiguration {
+  readonly destinationRegions: readonly string[];
+  readonly foundationModelId: string;
+  readonly inferenceProfileId: string;
+}
+
 export interface BizFlowAgentFoundationStackProps extends StackProps {
+  readonly bedrockModelAccess?: BedrockModelAccessConfiguration;
   readonly environmentName: string;
 }
 
@@ -98,17 +105,9 @@ export class BizFlowAgentFoundationStack extends Stack {
       }),
     );
 
-    this.runtimeExecutionRole.addToPolicy(
-      new iam.PolicyStatement({
-        sid: "InvokeBedrockModels",
-        actions: ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
-        resources: [
-          `arn:${this.partition}:bedrock:${this.region}::foundation-model/*`,
-          `arn:${this.partition}:bedrock:${this.region}:${this.account}:inference-profile/*`,
-          `arn:${this.partition}:bedrock:${this.region}:${this.account}:application-inference-profile/*`,
-        ],
-      }),
-    );
+    if (props.bedrockModelAccess !== undefined) {
+      this.addBedrockModelAccess(props.bedrockModelAccess);
+    }
 
     this.networkConfiguration = {
       networkMode: "PUBLIC",
@@ -126,5 +125,80 @@ export class BizFlowAgentFoundationStack extends Stack {
       description: "JSON networkConfiguration reused by AgentCore Runtime updates",
       value: JSON.stringify(this.networkConfiguration),
     });
+    if (props.bedrockModelAccess !== undefined) {
+      new CfnOutput(this, "AllowedBedrockModelId", {
+        description: "Bedrock inference profile ID allowed for BizFlow Runtime",
+        value: props.bedrockModelAccess.inferenceProfileId,
+      });
+      new CfnOutput(this, "AllowedBedrockDestinationRegions", {
+        description: "Destination Regions allowed for the Bedrock inference profile",
+        value: JSON.stringify(props.bedrockModelAccess.destinationRegions),
+      });
+    }
   }
+
+  private addBedrockModelAccess(
+    configuration: BedrockModelAccessConfiguration,
+  ): void {
+    const inferenceProfileId = validateModelIdentifier(
+      "inferenceProfileId",
+      configuration.inferenceProfileId,
+    );
+    const foundationModelId = validateModelIdentifier(
+      "foundationModelId",
+      configuration.foundationModelId,
+    );
+    const destinationRegions = Array.from(
+      new Set(configuration.destinationRegions.map((region) => region.trim())),
+    );
+    if (
+      destinationRegions.length === 0 ||
+      destinationRegions.some((region) => !/^[a-z]{2}(?:-gov)?-[a-z]+-\d$/.test(region))
+    ) {
+      throw new Error(
+        "bedrockModelAccess.destinationRegions must contain valid AWS Region names.",
+      );
+    }
+
+    const inferenceProfileArn =
+      `arn:${this.partition}:bedrock:${this.region}:${this.account}:` +
+      `inference-profile/${inferenceProfileId}`;
+    const invokeActions = [
+      "bedrock:InvokeModel",
+      "bedrock:InvokeModelWithResponseStream",
+    ];
+
+    this.runtimeExecutionRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: "InvokeBizFlowInferenceProfile",
+        actions: invokeActions,
+        resources: [inferenceProfileArn],
+      }),
+    );
+    this.runtimeExecutionRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: "InvokeBizFlowProfileModels",
+        actions: invokeActions,
+        resources: destinationRegions.map(
+          (region) =>
+            `arn:${this.partition}:bedrock:${region}::foundation-model/${foundationModelId}`,
+        ),
+        conditions: {
+          StringEquals: {
+            "bedrock:InferenceProfileArn": inferenceProfileArn,
+          },
+        },
+      }),
+    );
+  }
+}
+
+function validateModelIdentifier(name: string, value: string): string {
+  const normalized = value.trim();
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,255}$/.test(normalized)) {
+    throw new Error(
+      `bedrockModelAccess.${name} must be a valid Bedrock model identifier.`,
+    );
+  }
+  return normalized;
 }

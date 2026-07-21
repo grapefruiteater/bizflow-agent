@@ -22,7 +22,7 @@
 
 ### 現在の状態
 
-CDKソースは `infra` に実装済みです。初期Foundation、Runtime Version 1、サービス管理`DEFAULT`に加え、Version 1を参照する明示昇格用`PROD` Endpointのデプロイ完了をAWSコンソールで確認済みです。以後のアプリ更新ではCDKを使わず、公開スクリプトで新Versionを作成して`PROD`へ昇格します。
+CDKソースは `infra` に実装済みです。初期Foundation、Runtime Version 1、サービス管理`DEFAULT`に加え、Version 1を参照する明示昇格用`PROD` Endpointのデプロイ完了をAWSコンソールで確認済みです。採用モデルは `jp.amazon.nova-2-lite-v1:0` です。このprofileの東京・大阪モデル呼び出し権限を追加するFoundation Stackのソース変更は実装済みですが、AWS環境へのIAM更新はまだ実行していません。
 
 `config/cdk-outputs.json` はBizFlow専用スタックの実環境Outputsです。環境固有情報を含むためGit管理せず、Runtime Stackをdeployしたときだけ更新します。形式例は `config/agentcore.example.json` に保持します。
 
@@ -38,7 +38,9 @@ CDKソースは `infra` に実装済みです。初期Foundation、Runtime Versi
 - BizFlow専用AgentCore Runtime実行IAMロール
   - 専用ECRからのpull
   - AgentCore Runtimeログ、X-Rayトレース、CloudWatchメトリクスの送信
-  - 同一RegionのBedrock foundation modelおよび同一Accountのinference profile呼び出し
+  - contextで指定したBedrock inference profileの呼び出し
+  - profileの全送信先リージョンにある指定foundation modelの呼び出し
+  - foundation model権限には `bedrock:InferenceProfileArn` 条件を設定
 - Runtime作成時に使う `PUBLIC` の `networkConfiguration`
 
 他アプリのECR、IAMロール、VPC、セキュリティグループ、ロググループは参照しません。
@@ -98,6 +100,9 @@ CDK bootstrapリソースはCDKのデプロイ基盤であり、BizFlow Runtime�
 
 ```powershell
 npx cdk deploy BizFlowAgentFoundationStack `
+  --context "bedrockModelId=jp.amazon.nova-2-lite-v1:0" `
+  --context "bedrockFoundationModelId=amazon.nova-2-lite-v1:0" `
+  --context "bedrockModelDestinationRegions=ap-northeast-1,ap-northeast-3" `
   --profile $AwsProfile `
   --outputs-file .\config\foundation-outputs.json
 ```
@@ -149,13 +154,15 @@ $Digest = aws ecr describe-images `
 
 #### 5. 初期Runtimeを新規作成する
 
-CDK実装では `agentImageDigest` と `bedrockModelId` contextをRuntime Stackへ渡します。ECR URI全体を入力させないことで、Foundation Stackが作成した専用ECRだけを参照します。モデルIDは、対象リージョンで利用でき、Runtime実行ロールが呼び出せるものを明示します。
+CDK実装ではイメージdigestに加え、採用したinference profile、foundation model、送信先リージョンをcontextで渡します。ECR URI全体を入力させないことで、Foundation Stackが作成した専用ECRだけを参照します。
 
 ```powershell
 npx cdk deploy BizFlowAgentRuntimeStack `
   --context "environment=dev" `
   --context "agentImageDigest=$Digest" `
-  --context "bedrockModelId=<Bedrockモデルまたはinference-profile-ID>" `
+  --context "bedrockModelId=jp.amazon.nova-2-lite-v1:0" `
+  --context "bedrockFoundationModelId=amazon.nova-2-lite-v1:0" `
+  --context "bedrockModelDestinationRegions=ap-northeast-1,ap-northeast-3" `
   --profile $AwsProfile `
   --outputs-file .\config\cdk-outputs.json
 ```
@@ -198,18 +205,51 @@ $Digest = $CurrentOutputs.BizFlowAgentRuntimeStack.InitialAgentImageDigest
 npx cdk diff BizFlowAgentRuntimeStack `
   --context "environment=dev" `
   --context "agentImageDigest=$Digest" `
-  --context "bedrockModelId=<Bedrockモデルまたはinference-profile-ID>" `
+  --context "bedrockModelId=jp.amazon.nova-2-lite-v1:0" `
+  --context "bedrockFoundationModelId=amazon.nova-2-lite-v1:0" `
+  --context "bedrockModelDestinationRegions=ap-northeast-1,ap-northeast-3" `
   --profile $AwsProfile
 
 npx cdk deploy BizFlowAgentRuntimeStack `
   --context "environment=dev" `
   --context "agentImageDigest=$Digest" `
-  --context "bedrockModelId=<Bedrockモデルまたはinference-profile-ID>" `
+  --context "bedrockModelId=jp.amazon.nova-2-lite-v1:0" `
+  --context "bedrockFoundationModelId=amazon.nova-2-lite-v1:0" `
+  --context "bedrockModelDestinationRegions=ap-northeast-1,ap-northeast-3" `
   --profile $AwsProfile `
   --outputs-file .\config\cdk-outputs.json
 ```
 
 この一度限りの移行が完了した後、通常更新ではCDKを実行しません。
+
+### 既存環境へのNova 2 Lite IAM追加
+
+`jp.amazon.nova-2-lite-v1:0` は東京をsourceとして東京または大阪へ推論をルーティングします。既存Foundationの同一リージョン権限だけでは大阪側が不足するため、アプリの新Versionを公開する前にFoundation Stackを一度だけ更新します。
+
+まずローカルテスト後に、次の差分だけを確認します。ここでは実行していません。
+
+```powershell
+npx cdk diff BizFlowAgentFoundationStack `
+  --context "environment=dev" `
+  --context "bedrockModelId=jp.amazon.nova-2-lite-v1:0" `
+  --context "bedrockFoundationModelId=amazon.nova-2-lite-v1:0" `
+  --context "bedrockModelDestinationRegions=ap-northeast-1,ap-northeast-3" `
+  --profile $AwsProfile
+```
+
+期待する差分はRuntime実行ロールのIAM PolicyとFoundation Outputsだけです。ECR、Runtime、`DEFAULT`、`PROD`の置換や削除が表示された場合はdeployしません。差分が期待どおりなら、ユーザーの明示判断でFoundation Stackだけをdeployします。
+
+```powershell
+npx cdk deploy BizFlowAgentFoundationStack `
+  --context "environment=dev" `
+  --context "bedrockModelId=jp.amazon.nova-2-lite-v1:0" `
+  --context "bedrockFoundationModelId=amazon.nova-2-lite-v1:0" `
+  --context "bedrockModelDestinationRegions=ap-northeast-1,ap-northeast-3" `
+  --profile $AwsProfile `
+  --outputs-file .\config\foundation-outputs.json
+```
+
+このIAM更新が完了した後のアプリ更新ではCDKを実行せず、`publish-agentcore.ps1 -ModelId jp.amazon.nova-2-lite-v1:0`を使用します。Organizations SCPで大阪リージョンを拒否している場合も地理推論が失敗するため、AWS管理者による確認が必要です。
 
 ## ディレクトリ構成
 
@@ -369,7 +409,7 @@ const repository = new ecr.Repository(this, "BizFlowAgentRepository", {
 });
 ```
 
-Runtime Stackは `agentImageDigest` がない場合にはCDKアプリへ追加されません。`agentImageDigest` を指定した場合は `bedrockModelId` も必須です。このため、空のECRしかない段階ではFoundation Stackだけをdeployでき、初回イメージpush後にRuntime Stackを定義できます。通常更新ではこれらのcontextやCDKを使わず、`publish-agentcore.ps1` が保存済みOutputsを再利用します。
+Runtime Stackは `agentImageDigest` がない場合にはCDKアプリへ追加されません。`agentImageDigest` を指定した場合は `bedrockModelId`、`bedrockFoundationModelId`、`bedrockModelDestinationRegions` も必須です。このため、空のECRしかない段階ではFoundation Stackだけをdeployでき、初回イメージpush後にRuntime Stackを定義できます。通常更新ではこれらのcontextやCDKを使わず、`publish-agentcore.ps1` が保存済みOutputsを再利用します。
 
 通常更新でCDK Outputsを取り直すために `cdk deploy` を実行してはいけません。今回のBizFlow専用初期構築で保存したoutputsファイル、またはそこから作成した承認済みの環境別設定ファイルを使用します。
 
@@ -381,14 +421,14 @@ Runtime Stackは `agentImageDigest` がない場合にはCDKアプリへ追加�
 .\scripts\publish-agentcore.ps1 `
   -AWS_PROFILE <SSOプロファイル名> `
   -AWS_REGION ap-northeast-1 `
-  -ModelId <Bedrockモデルまたはinference-profile-ID> `
+  -ModelId jp.amazon.nova-2-lite-v1:0 `
   -ConfigPath .\config\cdk-outputs.json `
   -StackName BizFlowAgentRuntimeStack
 ```
 
 dry-runでも接続先、ECR設定、同一Git SHAタグの有無を確定するため、読み取り専用の `sts get-caller-identity`、`ecr describe-repositories`、`ecr batch-get-image` は実行します。それ以外のbuild、ECRログイン、push、Runtime更新、Endpoint更新は実行しません。
 
-`ModelId` はソースやOutputsへ埋め込まず、公開ごとに明示します。対象リージョンで利用でき、Runtime実行ロールの `bedrock:InvokeModel` 対象に含まれるモデルIDまたはinference profile IDを指定してください。現在のFoundation Stackは同一リージョンのfoundation modelと、同一リージョン・同一Accountのinference profileを許可しています。別リージョンへルーティングするprofileを採用する場合は、先にIAM設計を見直す必要があります。
+`ModelId` はRuntimeアプリのソースやOutputsへ埋め込まず、公開ごとに `jp.amazon.nova-2-lite-v1:0` を明示します。Foundation Stack側では、このprofileと東京・大阪のNova 2 LiteだけをIAM許可します。
 
 次の場合は処理を中止します。
 
@@ -414,7 +454,7 @@ dry-runの内容を確認した後、`-Execute` を付けます。
 .\scripts\publish-agentcore.ps1 `
   -AWS_PROFILE <SSOプロファイル名> `
   -AWS_REGION ap-northeast-1 `
-  -ModelId <Bedrockモデルまたはinference-profile-ID> `
+  -ModelId jp.amazon.nova-2-lite-v1:0 `
   -ConfigPath .\config\cdk-outputs.json `
   -StackName BizFlowAgentRuntimeStack `
   -Execute

@@ -5,6 +5,11 @@ import { BizFlowAgentFoundationStack } from "../lib/foundation-stack";
 describe("BizFlowAgentFoundationStack", () => {
   const app = new App();
   const stack = new BizFlowAgentFoundationStack(app, "FoundationTestStack", {
+    bedrockModelAccess: {
+      inferenceProfileId: "jp.amazon.nova-2-lite-v1:0",
+      foundationModelId: "amazon.nova-2-lite-v1:0",
+      destinationRegions: ["ap-northeast-1", "ap-northeast-3"],
+    },
     environmentName: "test",
     env: { account: "111122223333", region: "ap-northeast-1" },
   });
@@ -46,10 +51,25 @@ describe("BizFlowAgentFoundationStack", () => {
               "bedrock:InvokeModel",
               "bedrock:InvokeModelWithResponseStream",
             ]),
+            Sid: "InvokeBizFlowInferenceProfile",
+            Resource: Match.anyValue(),
+          }),
+          Match.objectLike({
+            Sid: "InvokeBizFlowProfileModels",
+            Resource: Match.anyValue(),
+            Condition: Match.objectLike({
+              StringEquals: Match.objectLike({
+                "bedrock:InferenceProfileArn": Match.anyValue(),
+              }),
+            }),
           }),
         ]),
       },
     });
+    const synthesizedTemplate = JSON.stringify(template.toJSON());
+    expect(synthesizedTemplate).toContain("jp.amazon.nova-2-lite-v1:0");
+    expect(synthesizedTemplate).toContain("amazon.nova-2-lite-v1:0");
+    expect(synthesizedTemplate).toContain("ap-northeast-3");
   });
 
   test("exports values needed by the initial runtime deployment", () => {
@@ -58,5 +78,26 @@ describe("BizFlowAgentFoundationStack", () => {
     template.hasOutput("AgentRuntimeNetworkConfiguration", {
       Value: '{"networkMode":"PUBLIC"}',
     });
+    template.hasOutput("AllowedBedrockModelId", {
+      Value: "jp.amazon.nova-2-lite-v1:0",
+    });
+    template.hasOutput("AllowedBedrockDestinationRegions", {
+      Value: '["ap-northeast-1","ap-northeast-3"]',
+    });
+  });
+
+  test("rejects malformed Bedrock model access settings", () => {
+    expect(
+      () =>
+        new BizFlowAgentFoundationStack(new App(), "InvalidModelStack", {
+          environmentName: "test",
+          env: { account: "111122223333", region: "ap-northeast-1" },
+          bedrockModelAccess: {
+            inferenceProfileId: "invalid model",
+            foundationModelId: "amazon.nova-2-lite-v1:0",
+            destinationRegions: ["ap-northeast-1"],
+          },
+        }),
+    ).toThrow(/inferenceProfileId/);
   });
 });

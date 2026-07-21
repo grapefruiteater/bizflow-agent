@@ -226,22 +226,32 @@ npx cdk deploy BizFlowAgentRuntimeStack `
 
 `jp.amazon.nova-2-lite-v1:0` は東京をsourceとして東京または大阪へ推論をルーティングします。既存Foundationの同一リージョン権限だけでは大阪側が不足するため、アプリの新Versionを公開する前にFoundation Stackを一度だけ更新します。
 
-まずローカルテスト後に、次の差分だけを確認します。ここでは実行していません。
+既存Runtime StackとのCross-Stack Exportを維持するため、現在deploy済みの初期イメージdigestをcontextへ再指定します。これはRuntime StackをCDKアプリのsynth対象に残すための値であり、Foundation Stackだけを指定したdiff/deployではRuntimeを更新しません。
+
+まず現在のOutputsからdigestを取得し、次の差分だけを確認します。ここでは実行していません。
 
 ```powershell
+$CurrentOutputs = Get-Content .\config\cdk-outputs.json -Raw | ConvertFrom-Json
+$Digest = $CurrentOutputs.BizFlowAgentRuntimeStack.InitialAgentImageDigest
+if ($Digest -notmatch '^sha256:[0-9a-f]{64}$') {
+  throw "InitialAgentImageDigestが見つからないか、形式が不正です。"
+}
+
 npx cdk diff BizFlowAgentFoundationStack `
   --context "environment=dev" `
+  --context "agentImageDigest=$Digest" `
   --context "bedrockModelId=jp.amazon.nova-2-lite-v1:0" `
   --context "bedrockFoundationModelId=amazon.nova-2-lite-v1:0" `
   --context "bedrockModelDestinationRegions=ap-northeast-1,ap-northeast-3" `
   --profile $AwsProfile
 ```
 
-期待する差分はRuntime実行ロールのIAM PolicyとFoundation Outputsだけです。ECR、Runtime、`DEFAULT`、`PROD`の置換や削除が表示された場合はdeployしません。差分が期待どおりなら、ユーザーの明示判断でFoundation Stackだけをdeployします。
+期待する差分はRuntime実行ロールのIAM Policyと、`AllowedBedrockModelId`・`AllowedBedrockDestinationRegions`の追加だけです。既存の`ExportsOutput...`、ECR、Runtime、`DEFAULT`、`PROD`の削除や置換が表示された場合はdeployしません。差分が期待どおりなら、ユーザーの明示判断でFoundation Stackだけをdeployします。
 
 ```powershell
 npx cdk deploy BizFlowAgentFoundationStack `
   --context "environment=dev" `
+  --context "agentImageDigest=$Digest" `
   --context "bedrockModelId=jp.amazon.nova-2-lite-v1:0" `
   --context "bedrockFoundationModelId=amazon.nova-2-lite-v1:0" `
   --context "bedrockModelDestinationRegions=ap-northeast-1,ap-northeast-3" `

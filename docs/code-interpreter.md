@@ -2,9 +2,9 @@
 
 ## 現在の状態
 
-AWS管理のAgentCore Code Interpreter `aws.codeinterpreter.v1`を、BizFlow Runtimeの読み取り専用分析ツールとして使用するソース、IAM Policy、公開スクリプト、ローカルテストを実装済みです。2026-07-22にRuntime実行ロールの`UseManagedCodeInterpreter`権限をFoundation Stackへdeployし、既存リソースの削除・置換がないことも確認しました。
+AWS管理のAgentCore Code Interpreter `aws.codeinterpreter.v1`を、BizFlow Runtimeの読み取り専用分析ツールとして使用するソース、IAM Policy、公開スクリプト、ローカルテストを実装済みです。2026-07-22にRuntime実行ロールの`UseManagedCodeInterpreter`権限をFoundation Stackへdeployし、Runtime Version 5を`PROD`へ反映しました。
 
-現在稼働中のRuntime Version 4には、新しいイメージと`BIZFLOW_CODE_INTERPRETER_ID`をまだ反映していません。このため、IAMは準備済みですがCode Interpreterの実呼び出しは次のRuntime Versionから有効になります。
+AgentCoreコンソールからVersion 5へPythonによる1から100までの整数の二乗和を依頼し、期待値`338350`を得ました。CloudWatch Logsの`bizflow.code_interpreter Code Interpreter analysis completed`も確認したため、ツール選択、Python実行、結果取得、セッション終了まで実環境検証済みです。
 
 専用Code Interpreterリソースは作成しません。AWSが提供する管理済みSystem Code Interpreterを使用し、追加の業務データアクセス権限や公開ネットワークを持たせません。
 
@@ -78,11 +78,11 @@ BIZFLOW_CODE_INTERPRETER_ID=aws.codeinterpreter.v1
 1. 完了: Code Interpreterのソース変更をGitへコミットする。Runtime公開前には、この状態更新を含む文書差分もコミットしてworktreeをcleanにする。
 2. 完了: Foundation Stackのdiffで`UseManagedCodeInterpreter` IAM statementだけが追加されることを確認する。
 3. 完了: Foundation StackへIAM差分を反映する。
-4. 次工程: `publish-agentcore.ps1`のdry-runへ`-EnableReadTools -EnableCodeInterpreter`を指定する。
-5. `-Execute`で新Runtime Versionを作成する。
-6. `READY`後、明示確認して`PROD`を新Versionへ切り替える。
-7. 公開スクリプトがランダムな文字列のSHA-256をPythonで計算させ、期待digestとの一致を確認する。
-8. CloudWatch Logsでセッション開始・完了を確認する。
+4. 完了: `publish-agentcore.ps1`のdry-runへ`-EnableReadTools -EnableCodeInterpreter`を指定する。
+5. 完了: `-Execute`でRuntime Version 5を作成する。
+6. 完了: `READY`後、明示確認して`PROD`をVersion 5へ切り替える。
+7. 完了: Python計算と読み取り専用応答契約を確認する。
+8. 完了: CloudWatch LogsでCode Interpreterの完了ログを確認する。
 
 Foundation IAM変更とRuntime更新は別の変更として実行します。Code Interpreter用の新しいAWSリソースは作成しません。
 
@@ -174,7 +174,7 @@ npm test -- --runInBand
 - 現時点ではテキスト出力だけをLLMへ返す。
 - 画像やグラフのS3永続化、署名付きURL発行は未実装。
 - Code Interpreterのセッションを利用者の会話間で再利用しない。
-- 会話・利用者設定の保持はAgentCore Memoryの後続工程で実装する。
+- 会話継続は後続のAgentCore短期Memoryで実装する。長期の利用者設定はCognito導入後に追加する。
 
 ## AWS公式資料
 

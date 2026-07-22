@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Callable
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -13,9 +13,19 @@ from starlette.concurrency import run_in_threadpool
 try:
     from .bizflow_agent import AgentConfigurationError, BizFlowAnalyzer
     from .business_data import prepare_business_analysis
+    from .conversation_memory import (
+        AgentCoreConversationMemory,
+        MemoryConfigurationError,
+        MemoryOperationError,
+    )
 except ImportError:  # The container starts this module directly from /app.
     from bizflow_agent import AgentConfigurationError, BizFlowAnalyzer
     from business_data import prepare_business_analysis
+    from conversation_memory import (
+        AgentCoreConversationMemory,
+        MemoryConfigurationError,
+        MemoryOperationError,
+    )
 
 LOGGER = logging.getLogger("bizflow.runtime")
 logging.basicConfig(
@@ -25,18 +35,30 @@ logging.basicConfig(
 
 app = FastAPI(
     title="BizFlow Agent Runtime",
-    version="0.4.0",
+    version="0.5.0",
     docs_url=None,
     redoc_url=None,
 )
 
 _ANALYZER = BizFlowAnalyzer()
+_MEMORY_PROVIDER: Callable[[], AgentCoreConversationMemory | None] = (
+    AgentCoreConversationMemory.from_environment
+)
 
 
 def get_analyzer() -> BizFlowAnalyzer:
     """Return the analyzer; kept replaceable for AWS-free local tests."""
 
     return _ANALYZER
+
+
+def get_conversation_memory() -> AgentCoreConversationMemory | None:
+    """Return optional session memory; kept replaceable for AWS-free tests."""
+
+    try:
+        return _MEMORY_PROVIDER()
+    except MemoryConfigurationError as exc:
+        raise AgentConfigurationError("Runtime memory configuration is invalid.") from exc
 
 
 def handle_invocation(payload: dict[str, Any], session_id: str | None) -> dict[str, Any]:
@@ -93,7 +115,36 @@ def handle_invocation(payload: dict[str, Any], session_id: str | None) -> dict[s
     analysis_prompt = (
         prepared_analysis.model_prompt if prepared_analysis else prompt.strip()
     )
+    memory = get_conversation_memory()
+    memory_status: dict[str, Any] | None = None
+    if memory is not None:
+        memory_status = {
+            "enabled": True,
+            "session_available": bool(session_id),
+            "context_turns": 0,
+            "event_stored": False,
+            "degraded": False,
+        }
+        if session_id:
+            try:
+                memory_context = memory.load_context(analysis_prompt, session_id)
+                analysis_prompt = memory_context.prompt
+                memory_status["context_turns"] = memory_context.turn_count
+            except MemoryOperationError:
+                LOGGER.exception("Continuing without short-term memory context")
+                memory_status["degraded"] = True
+
     response_text = get_analyzer().analyze(analysis_prompt)
+    if memory is not None and session_id:
+        try:
+            memory.save_turn(session_id, prompt.strip(), response_text)
+            if memory_status is not None:
+                memory_status["event_stored"] = True
+        except MemoryOperationError:
+            LOGGER.exception("Response succeeded but short-term memory was not stored")
+            if memory_status is not None:
+                memory_status["degraded"] = True
+
     result: dict[str, Any] = {
         "response": response_text,
         "status": "success",
@@ -102,6 +153,8 @@ def handle_invocation(payload: dict[str, Any], session_id: str | None) -> dict[s
     }
     if prepared_analysis:
         result["analysis_context"] = prepared_analysis.response_context
+    if memory_status is not None:
+        result["memory"] = memory_status
     if session_id:
         result["session_id"] = session_id
     return result

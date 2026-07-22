@@ -1,0 +1,7 @@
+{
+  "BizFlowAgentMemoryStack": {
+    "AgentMemoryId": "BizFlowMemory_dev-abcdefghij",
+    "AgentMemoryArn": "arn:aws:bedrock-agentcore:ap-northeast-1:111122223333:memory/BizFlowMemory_dev-abcdefghij",
+    "AgentMemoryEventExpiryDays": "30"
+  }
+}

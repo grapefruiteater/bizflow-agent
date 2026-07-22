@@ -4,7 +4,7 @@
 
 開いている `bizflow-agent` リポジトリをそのまま使用します。スクリプトは自身の配置場所からリポジトリルートを解決するため、絶対パスをソースコードへ埋め込みません。
 
-この文書の中心は既存AgentCore Runtimeのコンテナ公開です。ポートフォリオ用のS3、DynamoDB、Lambda、AgentCore Gateway、承認バックエンドは2026-07-22にAWSへdeploy・検証済みです。Code Interpreterはソース実装とFoundation IAMのdeployが完了し、次のRuntime Versionへの反映待ちです。Memory、ECS、Cognitoは未実装です。ツール基盤は [`tools-infrastructure.md`](tools-infrastructure.md)、Code Interpreterは [`code-interpreter.md`](code-interpreter.md)、全体の実装順序は [`portfolio-mvp.md`](portfolio-mvp.md) を参照してください。
+この文書の中心は既存AgentCore Runtimeのコンテナ公開です。ポートフォリオ用のS3、DynamoDB、Lambda、AgentCore Gateway、承認バックエンド、Code Interpreterは2026-07-22にAWSへdeploy・検証済みです。同日に短期Memory基盤もdeploy済みで、RuntimeへのMemory ID設定と2ターン検証が次工程です。ECS、Cognitoは未実装です。ツール基盤は [`tools-infrastructure.md`](tools-infrastructure.md)、Code Interpreterは [`code-interpreter.md`](code-interpreter.md)、Memoryは [`memory.md`](memory.md)、全体の実装順序は [`portfolio-mvp.md`](portfolio-mvp.md) を参照してください。
 
 開発・デプロイ環境は次の構成です。
 
@@ -18,7 +18,7 @@
 
 以前のアプリやCDKスタックで作成したAWSリソースは再利用しません。今回のBizFlowアプリ専用CDKスタックとしてECR、IAMロール、ログ、ネットワーク設定、初期AgentCore Runtime、`PROD` Endpointを新規作成します。通常のアプリ更新では `cdk deploy` を実行せず、Dockerイメージのbuild/push、`UpdateAgentRuntime`、`PROD` Endpoint更新を使用します。サービス管理の`DEFAULT` Endpointは常に最新Versionを指すため、本番トラフィックには使用しません。
 
-> 2026-07-22時点ではRuntime Version 4が`PROD`で稼働し、Gateway URLを設定した読み取り専用分析が有効です。Gateway、S3、DynamoDB、読み取り／書き込みLambda、BFF向け承認LambdaはAWSへ反映済みで、リモートスモークテスト、承認監査履歴、`PROD`のCloudWatch Logs出力も確認済みです。Code InterpreterのFoundation IAM権限もdeploy済みですが、Version 4では未有効です。
+> 2026-07-22時点ではRuntime Version 5が`PROD`で稼働し、Gateway URLを設定した読み取り専用分析とCode Interpreterが有効です。Code InterpreterのPython計算と完了ログ、Gateway、承認監査履歴、`PROD`のCloudWatch Logs出力を確認済みです。短期Memoryは次のRuntime Versionへ反映する前の段階です。
 
 ## BizFlow専用AWS基盤の新規作成
 
@@ -30,7 +30,7 @@ CDKソースは `infra` に実装済みです。Foundation、Runtime、サービ
 
 ### スタック分割
 
-初期RuntimeはECR上のコンテナイメージを必要とします。空のECR作成とRuntime作成を一度に行わず、FoundationとRuntimeを分けます。業務ツール基盤は既存Runtimeの通常更新から独立した3つ目のStackです。
+初期RuntimeはECR上のコンテナイメージを必要とします。空のECR作成とRuntime作成を一度に行わず、FoundationとRuntimeを分けます。業務ツール基盤と短期Memoryは既存Runtimeの通常更新から独立したStackです。
 
 #### `BizFlowAgentFoundationStack`
 
@@ -67,6 +67,15 @@ CDKソースは `infra` に実装済みです。Foundation、Runtime、サービ
 - 既存Runtime実行ロールから対象Gatewayだけを呼び出すIAM Policy
 
 `enableTools=true`の場合だけCDKアプリへ追加されます。既存RuntimeロールARNは既定で`config/cdk-outputs.json`から自動取得し、既存ロールをimportします。Tools StackからFoundation Stackへのcross-stack参照やdeploy依存はありません。このStackのAWS反映手順と検証項目は [`tools-infrastructure.md`](tools-infrastructure.md) に分離しています。
+
+#### `BizFlowAgentMemoryStack`（明示指定時のみ）
+
+- 30日保持のsession単位AgentCore短期Memory
+- Memory service role
+- 既存Runtimeロールへ対象Memoryの`CreateEvent`と`ListEvents`だけを許可するIAM Policy
+- Runtime公開用のMemory IDとARN Outputs
+
+`enableMemory=true`の場合だけCDKアプリへ追加されます。既存RuntimeロールをOutputs由来のARNでimportし、FoundationやTools Stackへのcross-stack参照を作りません。長期Memory strategyはCognito導入後まで作成しません。詳細は [`memory.md`](memory.md) を参照してください。
 
 ### 初期構築の実行順序
 
@@ -280,25 +289,32 @@ agents/bizflow/
   app.py
   bizflow_agent.py
   business_data.py
+  code_interpreter_tools.py
+  conversation_memory.py
   Dockerfile
   .dockerignore
   requirements.txt
   requirements-dev.txt
 config/
   agentcore.example.json
+  memory-outputs.example.json
   foundation-outputs.json  # 初回Foundation deploy時に生成する任意の環境別Outputs
   cdk-outputs.json         # Runtime deploy時に生成
 docs/
   business-analysis.md
+  code-interpreter.md
   deployment.md
+  memory.md
   portfolio-mvp.md
   tools-infrastructure.md
 infra/
   bin/bizflow-agent.ts
   lib/foundation-stack.ts
+  lib/memory-stack.ts
   lib/runtime-stack.ts
   lib/tools-stack.ts
   test/foundation-stack.test.ts
+  test/memory-stack.test.ts
   test/runtime-stack.test.ts
   test/tools-stack.test.ts
 lambdas/business_tools/
@@ -463,7 +479,9 @@ Runtime Stackは `agentImageDigest` がない場合にはCDKアプリへ追加�
   -StackName BizFlowAgentRuntimeStack `
   -EnableReadTools `
   -EnableCodeInterpreter `
-  -ToolsConfigPath .\config\tools-outputs.json
+  -ToolsConfigPath .\config\tools-outputs.json `
+  -EnableMemory `
+  -MemoryConfigPath .\config\memory-outputs.json
 ```
 
 dry-runでも接続先、ECR設定、同一Git SHAタグの有無を確定するため、読み取り専用の `sts get-caller-identity`、`ecr describe-repositories`、`ecr batch-get-image` は実行します。それ以外のbuild、ECRログイン、push、Runtime更新、Endpoint更新は実行しません。
@@ -483,6 +501,7 @@ dry-runでも接続先、ECR設定、同一Git SHAタグの有無を確定する
 - `networkConfiguration` が不正
 - `-EnableReadTools`指定時にTools Outputsまたはリージョン一致するGateway URLがない
 - `-EnableCodeInterpreter`指定時に管理済みID以外の`CodeInterpreterId`が指定されている
+- `-EnableMemory`指定時にMemory Outputsがない、またはMemory ARNのAccount・Region・IDが一致しない
 
 Git worktreeをcleanにするのは、SHAタグと実際のコンテナ内容を必ず一致させるためです。イメージタグには完全な40文字のGitコミットSHAを使用し、`latest` は使用しません。
 
@@ -502,6 +521,8 @@ dry-runの内容を確認した後、`-Execute` を付けます。
   -EnableReadTools `
   -EnableCodeInterpreter `
   -ToolsConfigPath .\config\tools-outputs.json `
+  -EnableMemory `
+  -MemoryConfigPath .\config\memory-outputs.json `
   -Execute
 ```
 
@@ -515,7 +536,7 @@ dry-runの内容を確認した後、`-Execute` を付けます。
 6. ECRからpush済みイメージのdigestを取得する。
 7. 現在のEndpoint `liveVersion` をロールバック用に保存する。
 8. `repository@sha256:...` を `containerConfiguration.containerUri` に指定する。
-9. `BIZFLOW_MODEL_PROVIDER=bedrock`、`BIZFLOW_MODEL_ID`、`BIZFLOW_AWS_REGION`をRuntime環境変数へ設定し、`-EnableReadTools`指定時は`BIZFLOW_GATEWAY_URL`、`-EnableCodeInterpreter`指定時は`BIZFLOW_CODE_INTERPRETER_ID=aws.codeinterpreter.v1`を追加する。
+9. `BIZFLOW_MODEL_PROVIDER=bedrock`、`BIZFLOW_MODEL_ID`、`BIZFLOW_AWS_REGION`をRuntime環境変数へ設定し、明示スイッチに応じて`BIZFLOW_GATEWAY_URL`、`BIZFLOW_CODE_INTERPRETER_ID`、`BIZFLOW_MEMORY_ID`を追加する。
 10. CDK Outputs由来のrole/network設定と `metadataConfiguration.requireMMDSV2=true` で `UpdateAgentRuntime` を実行する。
 11. 新Runtimeバージョンを期限付きでポーリングする。
 12. `READY` 後、新バージョン番号の手入力を要求する。
@@ -523,9 +544,10 @@ dry-runの内容を確認した後、`-Execute` を付けます。
 14. Endpointが `READY` かつ `liveVersion` が新バージョンになるまで待つ。
 15. `InvokeAgentRuntime` による通常スモークテストを行う。
 16. Code Interpreter有効時はランダムな文字列のSHA-256をPythonで計算させ、期待digestと一致することを確認する。
-17. デプロイ記録とロールバックコマンドを表示する。
+17. Memory有効時は同じRuntime session IDでmarkerを保存・再取得し、応答のMemory状態も確認する。
+18. デプロイ記録とロールバックコマンドを表示する。
 
-公開スクリプトはRuntimeの環境変数マップをモデル用3項目、明示的に有効化したGateway URL、管理済みCode Interpreter IDで管理します。Gateway URLは`config/tools-outputs.json`から読み込み、Code Interpreter IDは`aws.codeinterpreter.v1`だけを許可します。各スイッチを省略した更新では対応する環境変数を設定せず、従来動作を維持します。
+公開スクリプトはRuntimeの環境変数マップをモデル用3項目、明示的に有効化したGateway URL、管理済みCode Interpreter ID、Memory IDで管理します。Gateway URLとMemory IDは各StackのOutputsから読み込み、Account・Regionを検証します。各スイッチを省略した更新では対応する環境変数を設定せず、従来動作を維持します。
 
 `-Execute` を指定していても、Endpoint切り替え確認で別の値または空文字を入力すると、新Runtimeバージョンの作成までで停止します。`DEFAULT`はAgentCoreにより新Versionへ自動更新されますが、本番用`PROD`は旧Versionのまま維持されます。
 

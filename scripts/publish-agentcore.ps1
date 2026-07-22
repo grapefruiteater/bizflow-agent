@@ -26,6 +26,10 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$CodeInterpreterId = "aws.codeinterpreter.v1",
 
+    [switch]$EnableMemory,
+
+    [string]$MemoryConfigPath,
+
     [switch]$Execute,
 
     [ValidateRange(60, 3600)]
@@ -278,6 +282,39 @@ function Read-ToolsGatewayUrl {
     return $candidates[0]
 }
 
+function Read-MemoryConfiguration {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "Memory Outputs file was not found: $Path"
+    }
+    try {
+        $root = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+    }
+    catch {
+        throw "Memory Outputs file is not valid JSON: $Path"
+    }
+
+    $candidateObjects = @($root)
+    $candidateObjects += @($root.PSObject.Properties | ForEach-Object { $_.Value })
+    $candidates = @(
+        $candidateObjects |
+            Where-Object {
+                $null -ne $_ -and
+                $null -ne $_.PSObject.Properties["AgentMemoryId"] -and
+                $null -ne $_.PSObject.Properties["AgentMemoryArn"]
+            }
+    )
+    if ($candidates.Count -ne 1) {
+        throw "Could not find one AgentMemoryId and AgentMemoryArn pair in the Memory Outputs file."
+    }
+
+    return [pscustomobject]@{
+        MemoryId = [string]$candidates[0].AgentMemoryId
+        MemoryArn = [string]$candidates[0].AgentMemoryArn
+    }
+}
+
 function Get-EcrDetails {
     param([Parameter(Mandatory = $true)][string]$RepositoryUri)
 
@@ -422,12 +459,40 @@ if ($EnableCodeInterpreter -and $CodeInterpreterId -cne "aws.codeinterpreter.v1"
     throw "CodeInterpreterId must be 'aws.codeinterpreter.v1'. Custom Code Interpreter resources are not enabled by this publish workflow."
 }
 
+$memoryConfiguration = $null
+if ($EnableMemory) {
+    if (-not $MemoryConfigPath) {
+        $MemoryConfigPath = Join-Path $repoRoot "config\memory-outputs.json"
+    }
+    elseif (-not [IO.Path]::IsPathRooted($MemoryConfigPath)) {
+        $MemoryConfigPath = Join-Path $repoRoot $MemoryConfigPath
+    }
+    $memoryConfiguration = Read-MemoryConfiguration -Path $MemoryConfigPath
+}
+
 Assert-CommandExists -Name "aws"
 Assert-CommandExists -Name "git"
 Assert-CommandExists -Name "docker"
 
 $configuration = Read-DeploymentConfiguration -Path $ConfigPath -RequestedStackName $StackName
 $ecr = Get-EcrDetails -RepositoryUri $configuration.EcrRepositoryUri
+
+if ($memoryConfiguration) {
+    $memoryArnPattern = '^arn:(?<partition>aws(?:-[a-z]+)*):bedrock-agentcore:(?<region>[a-z0-9-]+):(?<account>\d{12}):memory/(?<id>[A-Za-z][A-Za-z0-9_-]{0,99}-[A-Za-z0-9]{10})$'
+    $memoryArnMatch = [regex]::Match($memoryConfiguration.MemoryArn, $memoryArnPattern)
+    if (-not $memoryArnMatch.Success) {
+        throw "AgentMemoryArn must be a valid AgentCore Memory ARN."
+    }
+    if ($memoryConfiguration.MemoryId -cne $memoryArnMatch.Groups["id"].Value) {
+        throw "AgentMemoryId must match the resource ID in AgentMemoryArn."
+    }
+    if ($memoryArnMatch.Groups["region"].Value -cne $AWS_REGION) {
+        throw "AgentMemoryArn Region must match AWS_REGION."
+    }
+    if ($memoryArnMatch.Groups["account"].Value -cne $ecr.AccountId) {
+        throw "AgentMemoryArn Account must match the BizFlow ECR account."
+    }
+}
 
 if ($configuration.EndpointName -ieq "DEFAULT") {
     $defaultEndpointMessage = "AgentCore automatically moves the DEFAULT endpoint when UpdateAgentRuntime creates a new version. The required manual approval before traffic promotion cannot be enforced with DEFAULT. Configure a custom endpoint such as PROD before executable publishing."
@@ -532,6 +597,11 @@ Write-Host "  Code Interpreter: $([bool]$EnableCodeInterpreter)"
 if ($EnableCodeInterpreter) {
     Write-Host "  Interpreter ID:   $CodeInterpreterId"
 }
+Write-Host "  Memory:           $([bool]$EnableMemory)"
+if ($memoryConfiguration) {
+    Write-Host "  Memory ID:        $($memoryConfiguration.MemoryId)"
+    Write-Host "  Memory config:    $MemoryConfigPath"
+}
 if ($existingImageDigest) {
     Write-Host "  Existing digest:  $existingImageDigest" -ForegroundColor Yellow
 }
@@ -584,6 +654,8 @@ $record = [pscustomobject]@{
     gatewayUrl = $gatewayUrl
     codeInterpreterEnabled = [bool]$EnableCodeInterpreter
     codeInterpreterId = if ($EnableCodeInterpreter) { $CodeInterpreterId } else { $null }
+    memoryEnabled = [bool]$EnableMemory
+    memoryId = if ($memoryConfiguration) { $memoryConfiguration.MemoryId } else { $null }
     runtimeVersion = $null
     endpointName = $configuration.EndpointName
     metadataConfiguration = [ordered]@{
@@ -593,6 +665,7 @@ $record = [pscustomobject]@{
     endpointLiveVersion = $null
     smokeTest = "NOT_RUN"
     codeInterpreterSmokeTest = if ($EnableCodeInterpreter) { "NOT_RUN" } else { "NOT_ENABLED" }
+    memorySmokeTest = if ($EnableMemory) { "NOT_RUN" } else { "NOT_ENABLED" }
     failure = $null
     rollbackCommand = $null
 }
@@ -660,6 +733,9 @@ try {
     }
     if ($EnableCodeInterpreter) {
         $runtimeEnvironmentVariables["BIZFLOW_CODE_INTERPRETER_ID"] = $CodeInterpreterId
+    }
+    if ($memoryConfiguration) {
+        $runtimeEnvironmentVariables["BIZFLOW_MEMORY_ID"] = $memoryConfiguration.MemoryId
     }
     $updateRequest = [ordered]@{
         agentRuntimeId = $configuration.AgentRuntimeId
@@ -771,6 +847,56 @@ Return the exact digest and state that AgentCore Code Interpreter was used. Do n
             $record.codeInterpreterSmokeTest = "PASSED"
         }
 
+        if ($EnableMemory) {
+            $record.memorySmokeTest = "RUNNING"
+            $recordPath = Write-DeploymentRecord -Record $record -Directory $DeploymentRecordDirectory -FileName $recordFileName
+            $memorySessionId = [guid]::NewGuid().ToString()
+            $memoryMarker = "bizflow-memory-$gitCommit-$newRuntimeVersion"
+            $rememberPrompt = "Remember this exact verification marker for my next message: $memoryMarker. Reply that it was remembered."
+            & $smokeTestPath `
+                -AWS_PROFILE $AWS_PROFILE `
+                -AWS_REGION $AWS_REGION `
+                -AgentRuntimeId $configuration.AgentRuntimeId `
+                -AgentRuntimeArn $record.agentRuntimeArn `
+                -EndpointName $configuration.EndpointName `
+                -ExpectedRuntimeVersion $newRuntimeVersion `
+                -RuntimeSessionId $memorySessionId `
+                -Prompt $rememberPrompt `
+                -RequireMemory
+            if ($LASTEXITCODE -ne 0) {
+                throw "AgentCore Memory write smoke test failed with exit code $LASTEXITCODE."
+            }
+
+            $recallPrompt = "Return the exact verification marker that I asked you to remember in my previous message."
+            $memoryRecallSucceeded = $false
+            foreach ($memoryAttempt in 1..3) {
+                & $smokeTestPath `
+                    -AWS_PROFILE $AWS_PROFILE `
+                    -AWS_REGION $AWS_REGION `
+                    -AgentRuntimeId $configuration.AgentRuntimeId `
+                    -AgentRuntimeArn $record.agentRuntimeArn `
+                    -EndpointName $configuration.EndpointName `
+                    -ExpectedRuntimeVersion $newRuntimeVersion `
+                    -RuntimeSessionId $memorySessionId `
+                    -Prompt $recallPrompt `
+                    -ExpectedResponsePattern ([regex]::Escape($memoryMarker)) `
+                    -RequireMemory `
+                    -MinimumMemoryContextTurns 1
+                if ($LASTEXITCODE -eq 0) {
+                    $memoryRecallSucceeded = $true
+                    break
+                }
+                if ($memoryAttempt -lt 3) {
+                    Write-Host "Memory recall was not ready; retrying ($memoryAttempt/3)..." -ForegroundColor Yellow
+                    Start-Sleep -Seconds 2
+                }
+            }
+            if (-not $memoryRecallSucceeded) {
+                throw "AgentCore Memory recall smoke test failed with exit code $LASTEXITCODE."
+            }
+            $record.memorySmokeTest = "PASSED"
+        }
+
         $record.smokeTest = "PASSED"
         $record.status = "SUCCEEDED"
         $recordPath = Write-DeploymentRecord -Record $record -Directory $DeploymentRecordDirectory -FileName $recordFileName
@@ -787,6 +913,9 @@ catch {
         $record.smokeTest = "FAILED"
         if ($record.codeInterpreterSmokeTest -eq "RUNNING") {
             $record.codeInterpreterSmokeTest = "FAILED"
+        }
+        if ($record.memorySmokeTest -eq "RUNNING") {
+            $record.memorySmokeTest = "FAILED"
         }
     }
     try {

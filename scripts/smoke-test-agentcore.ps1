@@ -31,7 +31,16 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$Prompt = "Return a short BizFlow Agent health confirmation.",
 
-    [string]$ExpectedResponsePattern
+    [string]$ExpectedResponsePattern,
+
+    [Parameter(ParameterSetName = "Remote")]
+    [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$')]
+    [string]$RuntimeSessionId,
+
+    [switch]$RequireMemory,
+
+    [ValidateRange(0, 100)]
+    [int]$MinimumMemoryContextTurns = 0
 )
 
 Set-StrictMode -Version Latest
@@ -78,6 +87,21 @@ function Invoke-AwsJson {
     }
 }
 
+function Get-PropertyValue {
+    param(
+        [Parameter(Mandatory = $true)][object]$Object,
+        [Parameter(Mandatory = $true)][string[]]$Names
+    )
+
+    foreach ($name in $Names) {
+        $property = $Object.PSObject.Properties[$name]
+        if ($null -ne $property -and $null -ne $property.Value) {
+            return $property.Value
+        }
+    }
+    throw "Response is missing required value. Accepted keys: $($Names -join ', ')"
+}
+
 function Assert-SmokeResponse {
     param([Parameter(Mandatory = $true)][object]$Response)
 
@@ -97,6 +121,29 @@ function Assert-SmokeResponse {
     if ($ExpectedResponsePattern -and
         [string]$Response.response -notmatch $ExpectedResponsePattern) {
         throw "Invocation response did not match the expected response pattern."
+    }
+    if ($RequireMemory) {
+        $memoryProperty = $Response.PSObject.Properties["memory"]
+        if ($null -eq $memoryProperty -or $null -eq $memoryProperty.Value) {
+            throw "Invocation response did not contain Memory status."
+        }
+        $memory = $memoryProperty.Value
+        if (-not [bool](Get-PropertyValue -Object $memory -Names @("enabled"))) {
+            throw "Invocation response did not report Memory as enabled."
+        }
+        if (-not [bool](Get-PropertyValue -Object $memory -Names @("session_available"))) {
+            throw "Invocation response did not report a Runtime session for Memory."
+        }
+        if ([bool](Get-PropertyValue -Object $memory -Names @("degraded"))) {
+            throw "Invocation response reported degraded Memory operations."
+        }
+        if (-not [bool](Get-PropertyValue -Object $memory -Names @("event_stored"))) {
+            throw "Invocation response did not confirm that the conversation event was stored."
+        }
+        $contextTurns = [int](Get-PropertyValue -Object $memory -Names @("context_turns"))
+        if ($contextTurns -lt $MinimumMemoryContextTurns) {
+            throw "Invocation response reported $contextTurns Memory context turns; expected at least $MinimumMemoryContextTurns."
+        }
     }
 }
 
@@ -149,7 +196,12 @@ function Invoke-RemoteSmokeTest {
         $payloadJson = @{ prompt = $Prompt } | ConvertTo-Json -Compress
         [IO.File]::WriteAllText($payloadPath, $payloadJson, [Text.UTF8Encoding]::new($false))
         $payloadUri = "fileb://" + $payloadPath.Replace('\', '/')
-        $sessionId = [guid]::NewGuid().ToString()
+        $sessionId = if ($RuntimeSessionId) {
+            $RuntimeSessionId
+        }
+        else {
+            [guid]::NewGuid().ToString()
+        }
 
         $arguments = @(
             "bedrock-agentcore", "invoke-agent-runtime",

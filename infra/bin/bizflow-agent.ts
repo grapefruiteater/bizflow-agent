@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { App, Environment, Tags } from "aws-cdk-lib";
 import { BizFlowAgentFoundationStack } from "../lib/foundation-stack";
+import { BizFlowAgentMemoryStack } from "../lib/memory-stack";
 import { BizFlowAgentRuntimeStack } from "../lib/runtime-stack";
 import { BizFlowAgentToolsStack } from "../lib/tools-stack";
 
@@ -41,6 +42,24 @@ if (enableTools) {
   Tags.of(toolsStack).add("Application", "BizFlowAgent");
   Tags.of(toolsStack).add("Environment", environmentName);
   Tags.of(toolsStack).add("ManagedBy", "AWS-CDK");
+}
+
+const enableMemory = readBooleanContext(app, "enableMemory", false);
+if (enableMemory) {
+  const runtimeExecutionRoleArn = readRuntimeExecutionRoleArn(app);
+  const memoryStack = new BizFlowAgentMemoryStack(
+    app,
+    "BizFlowAgentMemoryStack",
+    {
+      env: deploymentEnvironment,
+      description: "Session-scoped AgentCore Memory for BizFlow Agent",
+      environmentName,
+      runtimeExecutionRoleArn,
+    },
+  );
+  Tags.of(memoryStack).add("Application", "BizFlowAgent");
+  Tags.of(memoryStack).add("Environment", environmentName);
+  Tags.of(memoryStack).add("ManagedBy", "AWS-CDK");
 }
 
 const imageDigest = app.node.tryGetContext("agentImageDigest") as string | undefined;

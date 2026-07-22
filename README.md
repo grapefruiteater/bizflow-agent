@@ -8,20 +8,20 @@ AWS基盤は、以前のアプリやCDKスタックで作成したリソース�
 
 ## 現在の状態
 
-2026-07-22時点では、AgentCore Runtime Version 4がAWSの`PROD` Endpointで稼働しています。RuntimeはAmazon Nova 2 Liteを使用し、AgentCore Gateway経由でS3の架空問い合わせCSVと社内ルール、DynamoDBのタスク状態を読み取れます。Runtimeのスモークテストは成功し、`PROD`用CloudWatch Logsへのアプリケーションログ出力も確認済みです。
+2026-07-22時点では、AgentCore Runtime Version 5がAWSの`PROD` Endpointで稼働しています。RuntimeはAmazon Nova 2 Lite、AgentCore Gatewayの読み取りツール、AWS管理Code Interpreterを使用できます。Code InterpreterによるPython計算、読み取り専用応答契約、`PROD`用CloudWatch Logsの開始・完了ログまで確認済みです。
 
 | 項目 | 状態 |
 |---|---|
-| AgentCore Runtime | Version 4を`PROD`へ反映済み |
-| Runtimeイメージ | Git commit `56dc21e`、ECR digest固定 |
+| AgentCore Runtime | Version 5を`PROD`へ反映・検証済み |
+| Runtimeイメージ | GitコミットSHAタグ、ECR digest固定 |
 | Bedrockモデル | `jp.amazon.nova-2-lite-v1:0` |
 | Gateway読み取りツール | 4ツールをRuntimeへ接続済み |
 | Gateway書き込みツール | AWSへdeploy済みだがRuntimeから除外 |
 | S3・DynamoDB・Lambda・Gateway | `BizFlowAgentToolsStack`としてdeploy済み |
 | CloudWatch Logs | `PROD`の呼び出しログを確認済み |
 | 承認バックエンドLambda | AWSへdeploy・動作確認済み |
-| Code Interpreter | Foundation IAM権限をdeploy済み。Runtime Version 4では未有効 |
-| AgentCore Memory | 未接続 |
+| Code Interpreter | Runtime Version 5へ反映し、Python計算とCloudWatch Logsを確認済み |
+| AgentCore Memory | 短期Memory基盤をAWSへdeploy済み。Runtimeへの接続と2ターン検証は未実施 |
 | Next.js・Cognito・ECS | 未実装。最後の工程で追加する |
 
 現在の利用者向け動作は読み取り専用です。モデルは`get_business_requests`、`analyze_request_data`、`search_company_rules`、`get_task_status`を選択できますが、`create_business_task`はMCP allow-listとRuntime側の再フィルタの両方で除外しています。承認されていない書き込みをモデルの判断だけで実行することはありません。
@@ -40,11 +40,13 @@ AgentCore Runtimeが要求する次のHTTP Endpointを実装しています。
 
 Runtime環境変数`BIZFLOW_GATEWAY_URL`は`config/tools-outputs.json`から公開スクリプトが設定し、ソースへ固定しません。Gateway未設定時は呼び出し元が渡した情報だけを分析するモードへ戻せます。タスク登録、データ更新、承認、外部送信はRuntimeから実行しません。
 
-架空の問い合わせCSV、社内ルール、AgentCore Gateway Lambda target互換の5ツール、S3/DynamoDB adapter、読み取り・書き込みLambdaを分離した`BizFlowAgentToolsStack`は2026-07-22にAWSへdeploy済みです。Gateway直接スモークテストと、読み取りツールを有効化したRuntime Version 4のリモートスモークテストも完了しています。
+架空の問い合わせCSV、社内ルール、AgentCore Gateway Lambda target互換の5ツール、S3/DynamoDB adapter、読み取り・書き込みLambdaを分離した`BizFlowAgentToolsStack`は2026-07-22にAWSへdeploy済みです。Gateway直接スモークテストと、読み取りツールを有効化したRuntime Version 5のリモートスモークテストも完了しています。
 
 将来のWeb/BFFだけが呼び出す承認バックエンドLambdaもAWSへdeploy済みです。承認要求、状態確認、承認、DynamoDB監査履歴が正常に機能することを確認しました。このLambdaはAgentCore Gateway targetには登録せず、モデルから到達できない境界を維持しています。詳細は [`docs/approval-workflow.md`](docs/approval-workflow.md) を参照してください。
 
-次工程として、AWS管理の`aws.codeinterpreter.v1`を使うCode Interpreter分析ツールをRuntimeソースへ追加しました。セッションごとに隔離環境を開始・停止し、Gatewayまたは利用者から得たデータの集計・検算だけに使用します。既存の`analyze_request_data`は決定的なフォールバックとして残しています。Runtime実行ロールの`UseManagedCodeInterpreter`権限はFoundation Stackへdeploy済みです。現在稼働中のRuntime Version 4には環境変数と新イメージをまだ反映していないため、Code Interpreter自体は次のRuntime Versionから有効になります。詳細は [`docs/code-interpreter.md`](docs/code-interpreter.md) を参照してください。ポートフォリオ全体は [`docs/portfolio-mvp.md`](docs/portfolio-mvp.md)、ツール基盤は [`docs/tools-infrastructure.md`](docs/tools-infrastructure.md) にまとめています。
+AWS管理の`aws.codeinterpreter.v1`を使うCode Interpreter分析ツールはRuntime Version 5へ反映済みです。1から100までの整数の二乗和`338350`をPythonで計算し、CloudWatch Logsの`Code Interpreter analysis completed`まで確認しました。既存の`analyze_request_data`は決定的なフォールバックとして残しています。詳細は [`docs/code-interpreter.md`](docs/code-interpreter.md) を参照してください。
+
+次工程として、同一Runtime session ID内だけで会話を継続するAgentCore短期Memoryを実装しました。リクエスト本文の自己申告IDは使用せず、AgentCoreがHTTPヘッダーで渡したsession IDからactorを分離します。Cognito導入前は長期Memory strategyを作成しません。2026-07-22に短期Memory基盤とRuntime用最小権限をAWSへdeploy済みで、次は新しいRuntime VersionへMemory IDを設定して2ターンの保存・再取得を検証します。詳細は [`docs/memory.md`](docs/memory.md)、ポートフォリオ全体は [`docs/portfolio-mvp.md`](docs/portfolio-mvp.md)、ツール基盤は [`docs/tools-infrastructure.md`](docs/tools-infrastructure.md) を参照してください。
 
 採用モデルはAmazon Nova 2 LiteのJP地理推論profileです。
 
@@ -65,6 +67,7 @@ bizflow-agent/
 │       ├── bizflow_agent.py
 │       ├── business_data.py
 │       ├── code_interpreter_tools.py
+│       ├── conversation_memory.py
 │       ├── gateway_tools.py
 │       ├── Dockerfile
 │       ├── .dockerignore
@@ -72,12 +75,14 @@ bizflow-agent/
 │       └── requirements-dev.txt
 ├── config/
 │   ├── agentcore.example.json
+│   ├── memory-outputs.example.json
 │   ├── tools-outputs.example.json
 │   └── cdk-outputs.json          # BizFlow専用CDKが実行時に生成
 ├── docs/
 │   ├── approval-workflow.md
 │   ├── business-analysis.md
 │   ├── code-interpreter.md
+│   ├── memory.md
 │   ├── portfolio-mvp.md
 │   ├── tools-infrastructure.md
 │   └── deployment.md
@@ -86,10 +91,12 @@ bizflow-agent/
 │   │   └── bizflow-agent.ts
 │   ├── lib/
 │   │   ├── foundation-stack.ts
+│   │   ├── memory-stack.ts
 │   │   ├── runtime-stack.ts
 │   │   └── tools-stack.ts
 │   └── test/
 │       ├── foundation-stack.test.ts
+│       ├── memory-stack.test.ts
 │       ├── runtime-stack.test.ts
 │       └── tools-stack.test.ts
 ├── lambdas/
@@ -118,6 +125,7 @@ bizflow-agent/
 │   │   ├── test_bizflow_agent.py
 │   │   ├── test_business_data.py
 │   │   ├── test_code_interpreter_tools.py
+│   │   ├── test_conversation_memory.py
 │   │   └── test_endpoints.py
 │   └── tools/
 │       ├── test_aws_adapters.py
@@ -145,6 +153,7 @@ bizflow-agent/
 | `agents/bizflow/bizflow_agent.py` | Strands Agent、Bedrockモデル設定、読み取り専用システムプロンプトを実装します。Gateway設定時だけ4つの読み取りツールを公開し、書き込みツールを除外します。ローカルコンテナ検証専用の決定的な`local-test` providerも含みます。 |
 | `agents/bizflow/business_data.py` | 問い合わせスナップショットを検証し、期限超過・緊急・24時間以内期限を`as_of`基準で決定的に計算します。計算結果と根拠データをLLM向けコンテキストへ変換します。 |
 | `agents/bizflow/code_interpreter_tools.py` | AWS管理のCode Interpreterを1回の分析ごとに開始・停止し、ビジネスデータのPython集計・検算だけをStrandsツールとして公開します。入力・出力長、resource ID、エラー情報を制限します。 |
+| `agents/bizflow/conversation_memory.py` | AgentCore短期Memoryから最大5ターンを取得し、同じRuntime session IDへ利用者依頼と応答を保存します。本文の自己申告IDは使用せず、履歴・保存サイズとエラー情報を制限します。 |
 | `agents/bizflow/gateway_tools.py` | AgentCore GatewayへSigV4で接続し、明示allow-listに含まれるMCPツールだけを読み込むclientを構築します。 |
 | `agents/bizflow/Dockerfile` | Python 3.12ベースのRuntimeイメージを作成します。ポート8080を公開し、非rootユーザー `app` でUvicornを起動します。 |
 | `agents/bizflow/.dockerignore` | Git情報、仮想環境、テスト、ドキュメント、ローカル設定などをDocker build contextから除外します。 |
@@ -156,6 +165,7 @@ bizflow-agent/
 | ファイル | 説明 |
 |---|---|
 | `config/agentcore.example.json` | BizFlow専用CDK Outputsまたは環境別設定ファイルの形式例です。値は例示用であり、そのまま使用しません。 |
+| `config/memory-outputs.example.json` | Memory Stack Outputsの形式例です。実環境の`memory-outputs.json`はGit管理しません。 |
 | `config/tools-outputs.example.json` | Tools Stack Outputsの形式例です。実環境の`tools-outputs.json`はGit管理しません。 |
 | `config/cdk-outputs.json` | BizFlow専用スタックのdeploy後に生成する環境固有ファイルです。Git管理せず、公開スクリプトの入力として使用します。 |
 | `scripts/publish-agentcore.ps1` | Git SHAタグによるARM64イメージ公開とAgentCore Runtime更新を行います。デフォルトはdry-runで、`-Execute` 指定時のみbuild/pushとRuntime更新へ進みます。 |
@@ -165,6 +175,7 @@ bizflow-agent/
 | `docs/business-analysis.md` | 構造化された問い合わせ分析の入力項目、決定的な判定規則、応答契約、リクエスト例を説明します。 |
 | `docs/approval-workflow.md` | モデルから分離した承認バックエンドLambdaの操作契約、IAM境界、現在の反映状態を説明します。 |
 | `docs/code-interpreter.md` | 管理済みCode Interpreterのセッション、IAM、Runtime接続、フォールバック、反映順序を説明します。 |
+| `docs/memory.md` | session単位の短期Memory、IAM、保持期間、Runtime応答、反映順序と2ターンスモークテストを説明します。 |
 | `docs/portfolio-mvp.md` | ポートフォリオのシナリオ、現在の実装状態、5ツール、承認境界、今後のAWS実装順序を説明します。 |
 | `docs/tools-infrastructure.md` | S3、DynamoDB、読み取り／書き込みLambda、AgentCore GatewayのCDK設計、IAM境界、Outputs、直接スモークテストとRuntime接続を説明します。 |
 | `docs/deployment.md` | Windowsネイティブ環境の準備、CDK Outputs契約、dry-run、公開、ヘルスチェック、デプロイ記録、ロールバックの詳細手順です。 |
@@ -191,11 +202,13 @@ bizflow-agent/
 
 | ファイル | 説明 |
 |---|---|
-| `infra/bin/bizflow-agent.ts` | CDKアプリのエントリーポイントです。`agentImageDigest`がある場合だけRuntime Stack、`enableTools=true`の場合だけTools Stackを定義します。Tools用の既存RuntimeロールARNは既定で`config/cdk-outputs.json`から読み、contextでも上書きできます。Tools StackはFoundationへ依存しません。 |
+| `infra/bin/bizflow-agent.ts` | CDKアプリのエントリーポイントです。`agentImageDigest`がある場合だけRuntime Stack、`enableTools=true`の場合だけTools Stack、`enableMemory=true`の場合だけMemory Stackを定義します。既存RuntimeロールARNはOutputsから読み、Tools・Memory StackはFoundationへ依存しません。 |
 | `infra/lib/foundation-stack.ts` | BizFlow専用ECR、AgentCore実行IAMロール、`PUBLIC`ネットワーク設定を作成します。Bedrock権限を指定profile/modelへ限定し、AWS管理Code Interpreterにはセッション利用権限だけを付与します。 |
+| `infra/lib/memory-stack.ts` | 30日保持の短期AgentCore Memoryを作成し、既存Runtimeロールへ対象Memoryの`CreateEvent`と`ListEvents`だけを付与します。 |
 | `infra/lib/runtime-stack.ts` | digest固定の初回コンテナからAgentCore Runtime、`PROD`カスタムEndpoint、Endpoint別の30日保持ロググループ、通常更新用Outputsを作成します。`DEFAULT` EndpointはRuntime作成時にAgentCoreが自動作成します。 |
 | `infra/lib/tools-stack.ts` | 合成データ用S3、承認・タスク・監査用DynamoDB、Gateway用の読み取り／書き込みLambda、BFF向け承認Lambda、IAM認証のAgentCore Gatewayと5ツールを定義します。既存RuntimeロールはOutputs由来のARNでimportします。 |
 | `infra/test/foundation-stack.test.ts` | ECRとIAM、およびFoundation OutputsのCloudFormation定義を検証します。 |
+| `infra/test/memory-stack.test.ts` | Memoryの保持期間、RETAIN、最小権限、Outputs、長期strategyを作らないことを検証します。 |
 | `infra/test/runtime-stack.test.ts` | Runtime、Endpoint、ログ、Outputsを検証し、タグや不正なdigestを拒否することを確認します。 |
 | `infra/test/tools-stack.test.ts` | S3/DynamoDB保護、3つのLambdaの分離、最小権限、Gateway targetと5ツール、Outputsを検証します。 |
 | `package.json` / `package-lock.json` | Node.js/CDK依存関係を固定し、型チェックとCDKテストのコマンドを定義します。Node.js 20以上が必要です。 |
@@ -215,6 +228,8 @@ bizflow-agent/
 - 自動更新される`DEFAULT` Endpointでは`-Execute`を拒否し、明示昇格用のカスタムEndpointを要求する
 - Runtimeが `READY` になるまでEndpointを更新しない
 - 新Runtimeバージョンの手入力後にだけ`PROD` Endpointを切り替える
+- Memory有効時はOutputsのMemory ID・ARN・Account・Region一致を検証する
+- 同一Runtime session IDによる2ターンのMemory保存・再取得を自動検証する
 - 旧バージョンへ戻すコマンドを最後に表示する
 
 ### テスト・補助ファイル
@@ -226,6 +241,7 @@ bizflow-agent/
 | `tests/runtime/test_gateway_tools.py` | Gateway URL制限、SigV4署名、読み取りツールallow-listと書き込みツール除外をAWS接続なしで検証します。 |
 | `tests/runtime/test_business_data.py` | 期限超過などの業務判定と、タイムゾーン、重複ID、日時前後関係の境界条件を検証するpytestです。 |
 | `tests/runtime/test_code_interpreter_tools.py` | 管理済みresource ID制限、セッション終了、実行パラメータ、出力処理、安全なエラー応答をAWS接続なしで検証します。 |
+| `tests/runtime/test_conversation_memory.py` | session境界、履歴整形、短期イベント保存、サイズ制限、長期抽出SKIP、安全なエラー応答をfake clientで検証します。 |
 | `tests/approval_workflow/test_lambda_function.py` | 承認要求、状態取得、承認、却下、二重決定拒否、安全なエラー応答をAWS接続なしで検証します。 |
 | `tests/tools/test_business_tools.py` | 5ツールのGateway Lambda契約、架空データ分析、未承認拒否、承認後改変拒否、冪等なタスク登録を検証します。 |
 | `tests/tools/test_aws_adapters.py` | AWSへ接続せず、fake S3/DynamoDBでデータ読込、承認整合性、監査履歴、冪等性を検証します。 |
@@ -268,6 +284,10 @@ FoundationとRuntimeの初期構築、および`PROD` Endpointの動作確認は
 
 S3、DynamoDB、Gateway、読み取り／書き込みLambda、承認バックエンドLambdaは2026-07-22にdeploy済みです。Outputsには`ApprovalWorkflowFunctionName`と`ApprovalWorkflowFunctionArn`も含まれます。承認要求・状態取得・承認・DynamoDB監査履歴の実環境テストも完了しています。環境固有OutputsはGit管理対象外の`config/tools-outputs.json`へ保存します。
 
+### 短期Memory基盤の追加
+
+`BizFlowAgentMemoryStack`はFoundation、Tools、通常のRuntime更新から分離しています。`enableMemory=true`の場合だけ30日保持の短期AgentCore MemoryとRuntime用最小権限を定義します。2026-07-22にStackをAWSへdeployし、環境固有OutputsをGit管理対象外の`config/memory-outputs.json`へ保存済みです。Runtime Version 5にはまだMemory IDを設定していません。
+
 ### 通常更新
 
 初期構築後は、同じBizFlow専用Runtimeのバージョンだけを更新します。
@@ -279,9 +299,10 @@ S3、DynamoDB、Gateway、読み取り／書き込みLambda、承認バックエ
    - `BIZFLOW_AWS_REGION=<明示したリージョン>`
    - `BIZFLOW_GATEWAY_URL=<Tools Stack OutputsのGateway URL>`（`-EnableReadTools`指定時だけ）
    - `BIZFLOW_CODE_INTERPRETER_ID=aws.codeinterpreter.v1`（`-EnableCodeInterpreter`指定時だけ）
+   - `BIZFLOW_MEMORY_ID=<Memory Stack OutputsのMemory ID>`（`-EnableMemory`指定時だけ）
 3. `READY` 待機
 4. 明示確認後に`PROD` Endpointを切り替え
-5. 通常スモークテストと、ランダムなSHA-256課題を使ったCode Interpreterスモークテスト
+5. 通常スモークテスト、ランダムなSHA-256課題を使ったCode Interpreterスモークテスト、同じsession IDを使ったMemory保存・再取得スモークテスト
 
 この段階では `cdk deploy` を実行しません。再利用するのは他アプリのAWS構成ではなく、今回新規作成したBizFlow専用スタックのOutputsです。
 
@@ -299,6 +320,11 @@ npx cdk synth BizFlowAgentToolsStack `
   --context "environment=dev" `
   --context "enableTools=true" `
   --no-lookups
+
+npx cdk synth BizFlowAgentMemoryStack `
+  --context "environment=dev" `
+  --context "enableMemory=true" `
+  --no-lookups
 ```
 
 これらはTypeScriptの型チェック、CloudFormationテンプレートのユニットテスト、ローカルsynthであり、AWSリソースを変更しません。`enableTools`の既定値は`false`です。Tools Stackは既存ロールをARNでimportするため、Foundation Stackが依存Stackとして暗黙にdeployされることもありません。
@@ -312,7 +338,7 @@ python -m pip install --requirement .\agents\bizflow\requirements-dev.txt
 python -m pytest .\tests
 ```
 
-現在のローカル検証結果はPython `66 passed`、CDK/Jest `18 passed`、TypeScript型チェック成功です。
+現在のローカル検証結果はPython `77 passed`、CDK/Jest `21 passed`、TypeScript型チェック成功です。
 
 ### ARM64コンテナ
 
@@ -358,11 +384,13 @@ docker run --rm --platform linux/arm64 `
   -StackName BizFlowAgentRuntimeStack `
   -EnableReadTools `
   -EnableCodeInterpreter `
-  -ToolsConfigPath .\config\tools-outputs.json
+  -ToolsConfigPath .\config\tools-outputs.json `
+  -EnableMemory `
+  -MemoryConfigPath .\config\memory-outputs.json
 ```
 
-`ModelId`は採用済みのJP地理推論profileを明示します。`-EnableCodeInterpreter`はRuntime環境変数へ`BIZFLOW_CODE_INTERPRETER_ID=aws.codeinterpreter.v1`を追加します。dry-runではGateway URL、読み取りツール、Code Interpreterの有効状態を表示します。Foundation IAM差分はdeploy済みです。今回の文書更新も含めてworktreeをコミットした後、同じ引数へ`-Execute`を追加した場合だけイメージpushとRuntime更新を行います。具体的な確認順序は [`docs/deployment.md`](docs/deployment.md) に記載しています。
+`ModelId`は採用済みのJP地理推論profileを明示します。`-EnableCodeInterpreter`はRuntime環境変数へ`BIZFLOW_CODE_INTERPRETER_ID=aws.codeinterpreter.v1`、`-EnableMemory`は`BIZFLOW_MEMORY_ID`を追加します。dry-runではGateway、Code Interpreter、Memoryの有効状態と設定値を表示します。Memory Stackのdeployとworktreeのコミット後、同じ引数へ`-Execute`を追加した場合だけイメージpushとRuntime更新を行います。具体的な確認順序は [`docs/deployment.md`](docs/deployment.md) と [`docs/memory.md`](docs/memory.md) に記載しています。
 
-Code Interpreterを有効化する次のRuntime更新では、上記dry-runの確認後に同じ引数へ`-Execute`を追加します。公開スクリプトは通常のRuntime確認に加え、毎回異なる文字列のSHA-256をCode InterpreterのPythonで計算させます。期待digestと応答が一致した場合だけ、デプロイ記録の`codeInterpreterSmokeTest`を`PASSED`にします。CloudWatch Logsで`Starting Code Interpreter analysis`と`Code Interpreter analysis completed`も確認すると、ツールが実際に呼ばれ、セッションが正常終了したことを追跡できます。独立した再試験手順と合格条件は [`docs/code-interpreter.md`](docs/code-interpreter.md) に記載しています。
+公開スクリプトは通常のRuntime確認とCode InterpreterのSHA-256検算に加え、Memory有効時は同一session IDの2回目の呼び出しで、プロンプトに含めていない検証markerを再回答できることを確認します。成功時だけデプロイ記録の`memorySmokeTest`を`PASSED`にします。
 
 `publish-agentcore.ps1` はAWS基盤を作成しません。初期基盤はBizFlow専用CDKスタックで新規作成し、通常更新時には `cdk deploy` を実行しません。詳細は [`docs/deployment.md`](docs/deployment.md) を参照してください。

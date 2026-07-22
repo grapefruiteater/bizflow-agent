@@ -15,6 +15,7 @@ class FakeAnalyzer:
 
 def setup_function() -> None:
     runtime_module._ANALYZER = FakeAnalyzer()
+    runtime_module._MEMORY_PROVIDER = lambda: None
 
 
 def test_ping_returns_agentcore_health_contract() -> None:
@@ -59,6 +60,114 @@ def test_invocations_propagates_runtime_session_id() -> None:
 
     assert response.status_code == 200
     assert response.json()["session_id"] == session_id
+
+
+def test_invocations_loads_and_saves_optional_session_memory() -> None:
+    class FakeMemoryContext:
+        prompt = "Memory-enriched prompt"
+        turn_count = 2
+
+    class FakeMemory:
+        def __init__(self) -> None:
+            self.loaded: list[tuple[str, str]] = []
+            self.saved: list[tuple[str, str, str]] = []
+
+        def load_context(self, prompt: str, session_id: str) -> FakeMemoryContext:
+            self.loaded.append((prompt, session_id))
+            return FakeMemoryContext()
+
+        def save_turn(
+            self,
+            session_id: str,
+            prompt: str,
+            response: str,
+        ) -> None:
+            self.saved.append((session_id, prompt, response))
+
+    class CapturingAnalyzer:
+        def __init__(self) -> None:
+            self.prompt = ""
+
+        def analyze(self, prompt: str) -> str:
+            self.prompt = prompt
+            return "remembered response"
+
+    session_id = "11111111-2222-3333-4444-555555555555"
+    memory = FakeMemory()
+    analyzer = CapturingAnalyzer()
+    runtime_module._ANALYZER = analyzer
+    runtime_module._MEMORY_PROVIDER = lambda: memory
+
+    response = client.post(
+        "/invocations",
+        json={"prompt": "remember this"},
+        headers={"X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": session_id},
+    )
+
+    assert response.status_code == 200
+    assert analyzer.prompt == "Memory-enriched prompt"
+    assert memory.loaded == [("remember this", session_id)]
+    assert memory.saved == [(session_id, "remember this", "remembered response")]
+    assert response.json()["memory"] == {
+        "enabled": True,
+        "session_available": True,
+        "context_turns": 2,
+        "event_stored": True,
+        "degraded": False,
+    }
+    assert response.json()["write_operations_performed"] is False
+
+
+def test_invocations_reports_enabled_memory_without_runtime_session() -> None:
+    class UnusedMemory:
+        def load_context(self, _prompt: str, _session_id: str) -> None:
+            raise AssertionError("memory must not be read without a session")
+
+        def save_turn(self, _session_id: str, _prompt: str, _response: str) -> None:
+            raise AssertionError("memory must not be written without a session")
+
+    runtime_module._MEMORY_PROVIDER = lambda: UnusedMemory()
+
+    response = client.post("/invocations", json={"prompt": "hello"})
+
+    assert response.status_code == 200
+    assert response.json()["memory"] == {
+        "enabled": True,
+        "session_available": False,
+        "context_turns": 0,
+        "event_stored": False,
+        "degraded": False,
+    }
+
+
+def test_invocations_fail_open_when_memory_is_unavailable() -> None:
+    class BrokenMemory:
+        def load_context(self, _prompt: str, _session_id: str) -> None:
+            raise runtime_module.MemoryOperationError("sanitized")
+
+        def save_turn(self, _session_id: str, _prompt: str, _response: str) -> None:
+            raise runtime_module.MemoryOperationError("sanitized")
+
+    runtime_module._MEMORY_PROVIDER = lambda: BrokenMemory()
+    response = client.post(
+        "/invocations",
+        json={"prompt": "hello"},
+        headers={
+            "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": (
+                "11111111-2222-3333-4444-555555555555"
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    assert response.json()["memory"] == {
+        "enabled": True,
+        "session_available": True,
+        "context_turns": 0,
+        "event_stored": False,
+        "degraded": True,
+    }
 
 
 def test_invocations_analyzes_structured_business_data() -> None:

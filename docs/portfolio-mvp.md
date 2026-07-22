@@ -10,15 +10,15 @@
 
 | 段階 | 状態 | 内容 |
 |---|---|---|
-| AgentCore Runtime | AWSで稼働済み | Version 4、Nova 2 Lite、Gateway読み取りツール、`PROD` Endpoint、CloudWatch Logs確認済み |
+| AgentCore Runtime | AWSで稼働済み | Version 5、Nova 2 Lite、Gateway読み取りツール、Code Interpreter、`PROD` Endpoint、CloudWatch Logs確認済み |
 | 架空業務データ | ローカル実装済み | 個人情報を含まないCSVとMarkdownの社内ルール |
 | Lambda業務ツール | CDK・ローカル実装済み | Gateway Lambda target互換の5ツール、S3/DynamoDB adapter、読み取り・書き込み関数の分離 |
 | Human-in-the-loop境界 | CDK・ローカル実装済み | DynamoDBで未承認拒否、承認後改変拒否、重複登録防止、監査記録 |
 | S3・DynamoDB・Lambda・Gateway | AWSへdeploy済み | 2026-07-22にTools Stackを反映し、Outputsを環境別設定へ保存 |
-| Runtimeからのツール選択 | AWSへ反映済み | Version 4でSigV4 MCP clientから4つの読み取りツールだけを公開 |
+| Runtimeからのツール選択 | AWSへ反映済み | Version 5でSigV4 MCP clientから4つの読み取りツールだけを公開 |
 | 承認バックエンドLambda | AWSへdeploy・検証済み | Gatewayから分離し、承認要求・承認・却下・状態取得を処理 |
-| Code Interpreter | Foundation IAM deploy済み／Runtime未反映 | 管理済みSandboxで集計・検算し、Lambda集計をフォールバックとして維持 |
-| AgentCore Memory | 未接続 | 会話継続と利用者・会社設定を段階的に追加する |
+| Code Interpreter | AWSへ反映・検証済み | Version 5の管理済みSandboxでPython計算し、完了ログまで確認 |
+| AgentCore Memory | 短期Memory基盤をAWSへdeploy済み | Runtimeへの接続と2ターン検証が未実施。長期設定は認証後に追加 |
 | Next.js・Fargate・Cognito | 未実装 | フロントエンドとECSは最後の工程で追加する |
 
 構成図 [`bizflow_agent_architecture.drawio`](../bizflow_agent_architecture.drawio) は完成形の目標構成です。現在動いているリソースと目標構成を混同しないよう、上表を実装状況の基準とします。
@@ -97,10 +97,12 @@ AgentCore Gatewayへ登録するツール定義は [`tool-schema.json`](../lambd
 7. 完了: BFF専用の承認要求・承認・却下・状態取得Lambdaを追加する。
 8. 完了: Tools Stackへ承認Lambdaを反映し、承認状態と監査履歴を確認する。
 9. 完了: 管理済みCode Interpreterのソースを実装し、Foundation IAM差分をdeployする。
-10. 次工程: 新Runtime VersionへCode Interpreterを反映し、SHA-256課題とCloudWatch Logsで実呼び出しを確認する。
-11. AgentCore Memoryを接続し、利用者・会社設定を保持する。
-12. 最後にCognito、Next.js/BFF、ECS/Fargate、承認カードと実行履歴画面を追加する。
-13. Web承認フローのE2E検証後だけ、`create_business_task`をRuntimeの書き込み経路へ公開する。
+10. 完了: Runtime Version 5へCode Interpreterを反映し、Python計算とCloudWatch Logsで実呼び出しを確認する。
+11. 完了: 同一Runtime session内のAgentCore短期Memoryを実装する。
+12. 基盤完了・次工程継続: Memory StackをAWSへdeploy済み。新Runtime Versionへ反映し、2ターンの保存・再取得を確認する。
+13. 最後にCognito、Next.js/BFF、ECS/Fargate、承認カードと実行履歴画面を追加する。
+14. Cognitoの信頼済み利用者・会社IDを使う長期Memory strategyを追加する。
+15. Web承認フローのE2E検証後だけ、`create_business_task`をRuntimeの書き込み経路へ公開する。
 
 Tools Stackのリソース、IAM境界、データモデル、Outputs、反映前確認は [`tools-infrastructure.md`](tools-infrastructure.md) にまとめています。
 

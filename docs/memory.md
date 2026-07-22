@@ -2,7 +2,7 @@
 
 ## 現在の状態
 
-AgentCore Memoryを使った同一Runtimeセッション内の短期会話記憶について、Runtimeソース、専用CDK Stack、公開設定、自動スモークテスト、ローカルテストを実装済みです。2026-07-22に`BizFlowAgentMemoryStack`をAWSへdeployし、30日保持のMemory、service role、Runtime用最小権限、Outputsの作成を確認しました。Runtime Version 5へのMemory接続はまだ行っていません。
+AgentCore Memoryを使った同一Runtimeセッション内の短期会話記憶について、Runtimeソース、専用CDK Stack、公開設定、自動スモークテスト、ローカルテストを実装済みです。2026-07-22に`BizFlowAgentMemoryStack`をAWSへdeployし、30日保持のMemory、service role、Runtime用最小権限、Outputsの作成を確認しました。Memory IDを設定したRuntime Version 6を`PROD`へ反映し、同じRuntime session IDを使った2ターンの保存・再取得スモークテストも成功しています。
 
 現在は短期Memoryだけを使用し、長期Memory strategyは作成しません。Cognitoによる信頼済み利用者IDがない段階で、リクエスト本文の`actor_id`や`session_id`を信用して別セッションの記憶を取得しないためです。
 
@@ -88,12 +88,12 @@ BIZFLOW_MEMORY_ID=<AgentMemoryId>
 1. 完了: ソース、文書、ローカルテストを実装する。
 2. 完了: `BizFlowAgentMemoryStack`のCDK diffを確認する。
 3. 完了: Memory Stackをdeployし、Outputsを`config/memory-outputs.json`へ保存する。
-4. 次工程: 変更をGitへコミットし、worktreeをcleanにする。
-5. `publish-agentcore.ps1`を`-EnableReadTools -EnableCodeInterpreter -EnableMemory`付きでdry-runする。
-6. `-Execute`で新Runtime Versionを作成する。
-7. `READY`後、表示された新バージョン番号を入力して`PROD`を切り替える。
-8. 同じRuntime session IDを使う2ターンスモークテストで保存と再取得を確認する。
-9. CloudWatch Logsとデプロイ記録を確認する。
+4. 完了: 変更をGitへコミットし、worktreeをcleanにする。
+5. 完了: `publish-agentcore.ps1`を`-EnableReadTools -EnableCodeInterpreter -EnableMemory`付きでdry-runする。
+6. 完了: `-Execute`でRuntime Version 6を作成する。
+7. 完了: `READY`後、明示確認して`PROD`をVersion 6へ切り替える。
+8. 完了: 同じRuntime session IDを使う2ターンスモークテストで保存と再取得を確認する。
+9. 完了: デプロイ記録で通常・Code Interpreter・Memoryスモークテストがすべて`PASSED`であることを確認する。
 
 差分確認ではMemory Stackだけを指定します。
 

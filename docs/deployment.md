@@ -4,7 +4,7 @@
 
 開いている `bizflow-agent` リポジトリをそのまま使用します。スクリプトは自身の配置場所からリポジトリルートを解決するため、絶対パスをソースコードへ埋め込みません。
 
-この文書の中心は既存AgentCore Runtimeのコンテナ公開です。ポートフォリオ用のS3、DynamoDB、Lambda、AgentCore Gateway、承認バックエンド、Code Interpreterは2026-07-22にAWSへdeploy・検証済みです。同日に短期Memory基盤もdeploy済みで、RuntimeへのMemory ID設定と2ターン検証が次工程です。ECS、Cognitoは未実装です。ツール基盤は [`tools-infrastructure.md`](tools-infrastructure.md)、Code Interpreterは [`code-interpreter.md`](code-interpreter.md)、Memoryは [`memory.md`](memory.md)、全体の実装順序は [`portfolio-mvp.md`](portfolio-mvp.md) を参照してください。
+この文書の中心は既存AgentCore Runtimeのコンテナ公開です。ポートフォリオ用のS3、DynamoDB、Lambda、AgentCore Gateway、承認バックエンド、Code Interpreter、短期Memoryは2026-07-22にAWSへdeploy・検証済みです。ECS、Cognitoは未実装です。ツール基盤は [`tools-infrastructure.md`](tools-infrastructure.md)、Code Interpreterは [`code-interpreter.md`](code-interpreter.md)、Memoryは [`memory.md`](memory.md)、全体の実装順序は [`portfolio-mvp.md`](portfolio-mvp.md) を参照してください。
 
 開発・デプロイ環境は次の構成です。
 
@@ -18,7 +18,7 @@
 
 以前のアプリやCDKスタックで作成したAWSリソースは再利用しません。今回のBizFlowアプリ専用CDKスタックとしてECR、IAMロール、ログ、ネットワーク設定、初期AgentCore Runtime、`PROD` Endpointを新規作成します。通常のアプリ更新では `cdk deploy` を実行せず、Dockerイメージのbuild/push、`UpdateAgentRuntime`、`PROD` Endpoint更新を使用します。サービス管理の`DEFAULT` Endpointは常に最新Versionを指すため、本番トラフィックには使用しません。
 
-> 2026-07-22時点ではRuntime Version 5が`PROD`で稼働し、Gateway URLを設定した読み取り専用分析とCode Interpreterが有効です。Code InterpreterのPython計算と完了ログ、Gateway、承認監査履歴、`PROD`のCloudWatch Logs出力を確認済みです。短期Memoryは次のRuntime Versionへ反映する前の段階です。
+> 2026-07-22時点ではRuntime Version 6が`PROD`で稼働し、Gateway URLを設定した読み取り専用分析、Code Interpreter、短期Memoryが有効です。通常呼び出し、Code Interpreter、同一session IDによるMemoryの2ターン保存・再取得がすべて成功しています。旧Version 5へ戻すロールバックコマンドはデプロイ記録に保存されています。
 
 ## BizFlow専用AWS基盤の新規作成
 

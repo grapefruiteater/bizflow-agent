@@ -8,11 +8,11 @@ AWS基盤は、以前のアプリやCDKスタックで作成したリソース�
 
 ## 現在の状態
 
-2026-07-22時点では、AgentCore Runtime Version 5がAWSの`PROD` Endpointで稼働しています。RuntimeはAmazon Nova 2 Lite、AgentCore Gatewayの読み取りツール、AWS管理Code Interpreterを使用できます。Code InterpreterによるPython計算、読み取り専用応答契約、`PROD`用CloudWatch Logsの開始・完了ログまで確認済みです。
+2026-07-22時点では、AgentCore Runtime Version 6がAWSの`PROD` Endpointで稼働しています。RuntimeはAmazon Nova 2 Lite、AgentCore Gatewayの読み取りツール、AWS管理Code Interpreter、同一Runtime session内の短期Memoryを使用できます。通常呼び出し、Code Interpreter、Memoryの2ターン保存・再取得、読み取り専用応答契約を検証済みです。
 
 | 項目 | 状態 |
 |---|---|
-| AgentCore Runtime | Version 5を`PROD`へ反映・検証済み |
+| AgentCore Runtime | Version 6を`PROD`へ反映・検証済み |
 | Runtimeイメージ | GitコミットSHAタグ、ECR digest固定 |
 | Bedrockモデル | `jp.amazon.nova-2-lite-v1:0` |
 | Gateway読み取りツール | 4ツールをRuntimeへ接続済み |
@@ -20,8 +20,8 @@ AWS基盤は、以前のアプリやCDKスタックで作成したリソース�
 | S3・DynamoDB・Lambda・Gateway | `BizFlowAgentToolsStack`としてdeploy済み |
 | CloudWatch Logs | `PROD`の呼び出しログを確認済み |
 | 承認バックエンドLambda | AWSへdeploy・動作確認済み |
-| Code Interpreter | Runtime Version 5へ反映し、Python計算とCloudWatch Logsを確認済み |
-| AgentCore Memory | 短期Memory基盤をAWSへdeploy済み。Runtimeへの接続と2ターン検証は未実施 |
+| Code Interpreter | Runtime Version 6でも自動スモークテスト成功 |
+| AgentCore Memory | Runtime Version 6へ接続し、2ターンの保存・再取得を検証済み |
 | Next.js・Cognito・ECS | 未実装。最後の工程で追加する |
 
 現在の利用者向け動作は読み取り専用です。モデルは`get_business_requests`、`analyze_request_data`、`search_company_rules`、`get_task_status`を選択できますが、`create_business_task`はMCP allow-listとRuntime側の再フィルタの両方で除外しています。承認されていない書き込みをモデルの判断だけで実行することはありません。
@@ -40,13 +40,13 @@ AgentCore Runtimeが要求する次のHTTP Endpointを実装しています。
 
 Runtime環境変数`BIZFLOW_GATEWAY_URL`は`config/tools-outputs.json`から公開スクリプトが設定し、ソースへ固定しません。Gateway未設定時は呼び出し元が渡した情報だけを分析するモードへ戻せます。タスク登録、データ更新、承認、外部送信はRuntimeから実行しません。
 
-架空の問い合わせCSV、社内ルール、AgentCore Gateway Lambda target互換の5ツール、S3/DynamoDB adapter、読み取り・書き込みLambdaを分離した`BizFlowAgentToolsStack`は2026-07-22にAWSへdeploy済みです。Gateway直接スモークテストと、読み取りツールを有効化したRuntime Version 5のリモートスモークテストも完了しています。
+架空の問い合わせCSV、社内ルール、AgentCore Gateway Lambda target互換の5ツール、S3/DynamoDB adapter、読み取り・書き込みLambdaを分離した`BizFlowAgentToolsStack`は2026-07-22にAWSへdeploy済みです。Gateway直接スモークテストと、読み取りツールを有効化したRuntime Version 6のリモートスモークテストも完了しています。
 
 将来のWeb/BFFだけが呼び出す承認バックエンドLambdaもAWSへdeploy済みです。承認要求、状態確認、承認、DynamoDB監査履歴が正常に機能することを確認しました。このLambdaはAgentCore Gateway targetには登録せず、モデルから到達できない境界を維持しています。詳細は [`docs/approval-workflow.md`](docs/approval-workflow.md) を参照してください。
 
-AWS管理の`aws.codeinterpreter.v1`を使うCode Interpreter分析ツールはRuntime Version 5へ反映済みです。1から100までの整数の二乗和`338350`をPythonで計算し、CloudWatch Logsの`Code Interpreter analysis completed`まで確認しました。既存の`analyze_request_data`は決定的なフォールバックとして残しています。詳細は [`docs/code-interpreter.md`](docs/code-interpreter.md) を参照してください。
+AWS管理の`aws.codeinterpreter.v1`を使うCode Interpreter分析ツールはRuntime Version 6でも有効です。Version 5で1から100までの整数の二乗和`338350`とCloudWatch Logsの完了ログを確認し、Version 6への更新時にも自動スモークテストが成功しました。既存の`analyze_request_data`は決定的なフォールバックとして残しています。詳細は [`docs/code-interpreter.md`](docs/code-interpreter.md) を参照してください。
 
-次工程として、同一Runtime session ID内だけで会話を継続するAgentCore短期Memoryを実装しました。リクエスト本文の自己申告IDは使用せず、AgentCoreがHTTPヘッダーで渡したsession IDからactorを分離します。Cognito導入前は長期Memory strategyを作成しません。2026-07-22に短期Memory基盤とRuntime用最小権限をAWSへdeploy済みで、次は新しいRuntime VersionへMemory IDを設定して2ターンの保存・再取得を検証します。詳細は [`docs/memory.md`](docs/memory.md)、ポートフォリオ全体は [`docs/portfolio-mvp.md`](docs/portfolio-mvp.md)、ツール基盤は [`docs/tools-infrastructure.md`](docs/tools-infrastructure.md) を参照してください。
+同一Runtime session ID内だけで会話を継続するAgentCore短期MemoryはRuntime Version 6へ反映済みです。リクエスト本文の自己申告IDは使用せず、AgentCoreがHTTPヘッダーで渡したsession IDからactorを分離します。Cognito導入前は長期Memory strategyを作成しません。同じsession IDを使った2ターンの自動スモークテストで、保存と再取得が成功しました。詳細は [`docs/memory.md`](docs/memory.md)、ポートフォリオ全体は [`docs/portfolio-mvp.md`](docs/portfolio-mvp.md)、ツール基盤は [`docs/tools-infrastructure.md`](docs/tools-infrastructure.md) を参照してください。
 
 採用モデルはAmazon Nova 2 LiteのJP地理推論profileです。
 
@@ -286,7 +286,7 @@ S3、DynamoDB、Gateway、読み取り／書き込みLambda、承認バックエ
 
 ### 短期Memory基盤の追加
 
-`BizFlowAgentMemoryStack`はFoundation、Tools、通常のRuntime更新から分離しています。`enableMemory=true`の場合だけ30日保持の短期AgentCore MemoryとRuntime用最小権限を定義します。2026-07-22にStackをAWSへdeployし、環境固有OutputsをGit管理対象外の`config/memory-outputs.json`へ保存済みです。Runtime Version 5にはまだMemory IDを設定していません。
+`BizFlowAgentMemoryStack`はFoundation、Tools、通常のRuntime更新から分離しています。`enableMemory=true`の場合だけ30日保持の短期AgentCore MemoryとRuntime用最小権限を定義します。2026-07-22にStackをAWSへdeployし、環境固有OutputsをGit管理対象外の`config/memory-outputs.json`へ保存しました。Memory IDはRuntime Version 6へ設定済みです。
 
 ### 通常更新
 

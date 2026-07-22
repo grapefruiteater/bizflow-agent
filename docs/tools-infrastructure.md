@@ -4,7 +4,7 @@
 
 `BizFlowAgentToolsStack`のCDKソース、Lambda処理、S3/DynamoDB adapter、ユニットテストは実装済みです。TypeScript型チェック、CDKテンプレートテスト、`--no-lookups`付きローカルsynthも成功しています。
 
-S3、DynamoDB、読み取り／書き込みLambda、Gatewayは2026-07-22にAWSへdeploy済みで、環境別OutputsはGit管理対象外の`config/tools-outputs.json`へ保存されています。AgentCore Runtime Version 5にはGateway URLが設定され、`PROD` Endpointから4つの読み取りツールを利用できます。Gateway直接スモークテスト、Runtimeスモークテスト、CloudWatch Logsへの出力を確認済みです。
+S3、DynamoDB、読み取り／書き込みLambda、Gatewayは2026-07-22にAWSへdeploy済みで、環境別OutputsはGit管理対象外の`config/tools-outputs.json`へ保存されています。AgentCore Runtime Version 6にはGateway URLが設定され、`PROD` Endpointから4つの読み取りツールを利用できます。Gateway直接スモークテスト、Runtimeスモークテスト、CloudWatch Logsへの出力を確認済みです。
 
 将来のBFFだけが呼び出す承認バックエンドLambdaもAWSへdeploy済みです。Outputsは9つとなり、`ApprovalWorkflowFunctionName`と`ApprovalWorkflowFunctionArn`が追加されています。承認要求・承認・DynamoDB監査履歴の実環境テストも完了しています。
 
@@ -129,7 +129,7 @@ Tools Stackの初回反映では、対象Account、Region、作成リソース�
 12. 完了: Tools Stackの差分が承認Lambda、ロググループ、IAM Policy、2 Outputsだけであることを確認する。
 13. 完了: Tools Stackへ反映し、承認状態とDynamoDB監査履歴を確認する。
 14. 完了: Code InterpreterをRuntime Version 5へ反映し、Python計算と完了ログを確認する。
-15. 基盤完了・次工程継続: AgentCore短期Memory用の独立Stackをdeploy済み。Runtime連携と2ターン検証を行う。
+15. 完了: AgentCore短期Memory用の独立StackとRuntime Version 6を反映し、2ターンの保存・再取得を確認する。
 16. 最後にCognito、Next.js/BFF、ECS/Fargateを追加し、BFFロールへ承認Lambdaのinvoke権限だけを付与する。
 17. E2Eで未承認拒否と承認後登録を確認してから、書き込みツールをRuntimeへ公開する。
 

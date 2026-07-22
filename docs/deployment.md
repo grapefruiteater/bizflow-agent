@@ -4,7 +4,7 @@
 
 開いている `bizflow-agent` リポジトリをそのまま使用します。スクリプトは自身の配置場所からリポジトリルートを解決するため、絶対パスをソースコードへ埋め込みません。
 
-この文書の中心は既存AgentCore Runtimeのコンテナ公開です。ポートフォリオ用のS3、DynamoDB、Lambda、AgentCore Gatewayは独立した`BizFlowAgentToolsStack`として2026-07-22にAWSへdeploy済みです。Code Interpreter、Memory、ECS、Cognitoは未実装です。ツール基盤は [`tools-infrastructure.md`](tools-infrastructure.md)、全体の実装順序は [`portfolio-mvp.md`](portfolio-mvp.md) を参照してください。
+この文書の中心は既存AgentCore Runtimeのコンテナ公開です。ポートフォリオ用のS3、DynamoDB、Lambda、AgentCore Gateway、承認バックエンドは2026-07-22にAWSへdeploy・検証済みです。Code InterpreterはソースとIAM差分を実装済みですがAWS未反映、Memory、ECS、Cognitoは未実装です。ツール基盤は [`tools-infrastructure.md`](tools-infrastructure.md)、Code Interpreterは [`code-interpreter.md`](code-interpreter.md)、全体の実装順序は [`portfolio-mvp.md`](portfolio-mvp.md) を参照してください。
 
 開発・デプロイ環境は次の構成です。
 
@@ -18,7 +18,7 @@
 
 以前のアプリやCDKスタックで作成したAWSリソースは再利用しません。今回のBizFlowアプリ専用CDKスタックとしてECR、IAMロール、ログ、ネットワーク設定、初期AgentCore Runtime、`PROD` Endpointを新規作成します。通常のアプリ更新では `cdk deploy` を実行せず、Dockerイメージのbuild/push、`UpdateAgentRuntime`、`PROD` Endpoint更新を使用します。サービス管理の`DEFAULT` Endpointは常に最新Versionを指すため、本番トラフィックには使用しません。
 
-> 現在AWSで稼働しているRuntime VersionはStrands AgentsとAmazon Bedrockモデルを使う入力ベースの読み取り専用分析までです。Gateway、永続ストア、読み取り／書き込みLambdaはAWSへ反映済みですが、稼働中VersionにはGateway URLをまだ設定していません。今回のソースを新Runtime Versionとして公開した後に読み取りツールが有効になります。
+> 2026-07-22時点ではRuntime Version 4が`PROD`で稼働し、Gateway URLを設定した読み取り専用分析が有効です。Gateway、S3、DynamoDB、読み取り／書き込みLambda、BFF向け承認LambdaはAWSへ反映済みで、リモートスモークテスト、承認監査履歴、`PROD`のCloudWatch Logs出力も確認済みです。Code Interpreterは次のRuntime Versionへ反映する前の段階です。
 
 ## BizFlow専用AWS基盤の新規作成
 
@@ -462,6 +462,7 @@ Runtime Stackは `agentImageDigest` がない場合にはCDKアプリへ追加�
   -ConfigPath .\config\cdk-outputs.json `
   -StackName BizFlowAgentRuntimeStack `
   -EnableReadTools `
+  -EnableCodeInterpreter `
   -ToolsConfigPath .\config\tools-outputs.json
 ```
 
@@ -481,6 +482,7 @@ dry-runでも接続先、ECR設定、同一Git SHAタグの有無を確定する
 - 必須のCDK Outputがない
 - `networkConfiguration` が不正
 - `-EnableReadTools`指定時にTools Outputsまたはリージョン一致するGateway URLがない
+- `-EnableCodeInterpreter`指定時に管理済みID以外の`CodeInterpreterId`が指定されている
 
 Git worktreeをcleanにするのは、SHAタグと実際のコンテナ内容を必ず一致させるためです。イメージタグには完全な40文字のGitコミットSHAを使用し、`latest` は使用しません。
 
@@ -498,6 +500,7 @@ dry-runの内容を確認した後、`-Execute` を付けます。
   -ConfigPath .\config\cdk-outputs.json `
   -StackName BizFlowAgentRuntimeStack `
   -EnableReadTools `
+  -EnableCodeInterpreter `
   -ToolsConfigPath .\config\tools-outputs.json `
   -Execute
 ```
@@ -512,16 +515,17 @@ dry-runの内容を確認した後、`-Execute` を付けます。
 6. ECRからpush済みイメージのdigestを取得する。
 7. 現在のEndpoint `liveVersion` をロールバック用に保存する。
 8. `repository@sha256:...` を `containerConfiguration.containerUri` に指定する。
-9. `BIZFLOW_MODEL_PROVIDER=bedrock`、`BIZFLOW_MODEL_ID`、`BIZFLOW_AWS_REGION`をRuntime環境変数へ設定し、`-EnableReadTools`指定時だけOutputs由来の`BIZFLOW_GATEWAY_URL`を追加する。
+9. `BIZFLOW_MODEL_PROVIDER=bedrock`、`BIZFLOW_MODEL_ID`、`BIZFLOW_AWS_REGION`をRuntime環境変数へ設定し、`-EnableReadTools`指定時は`BIZFLOW_GATEWAY_URL`、`-EnableCodeInterpreter`指定時は`BIZFLOW_CODE_INTERPRETER_ID=aws.codeinterpreter.v1`を追加する。
 10. CDK Outputs由来のrole/network設定と `metadataConfiguration.requireMMDSV2=true` で `UpdateAgentRuntime` を実行する。
 11. 新Runtimeバージョンを期限付きでポーリングする。
 12. `READY` 後、新バージョン番号の手入力を要求する。
 13. 入力が一致した場合だけ`PROD` Endpointを更新する。
 14. Endpointが `READY` かつ `liveVersion` が新バージョンになるまで待つ。
-15. `InvokeAgentRuntime` によるスモークテストを行う。
-16. デプロイ記録とロールバックコマンドを表示する。
+15. `InvokeAgentRuntime` による通常スモークテストを行う。
+16. Code Interpreter有効時はランダムな文字列のSHA-256をPythonで計算させ、期待digestと一致することを確認する。
+17. デプロイ記録とロールバックコマンドを表示する。
 
-公開スクリプトはRuntimeの環境変数マップをモデル用3項目と、明示的に有効化したGateway URLで管理します。Gateway URLは`config/tools-outputs.json`から読み込み、ソースやデプロイコマンドへ直接埋め込みません。`-EnableReadTools`を省略した更新ではGateway環境変数を設定せず、入力ベースの従来動作を維持します。
+公開スクリプトはRuntimeの環境変数マップをモデル用3項目、明示的に有効化したGateway URL、管理済みCode Interpreter IDで管理します。Gateway URLは`config/tools-outputs.json`から読み込み、Code Interpreter IDは`aws.codeinterpreter.v1`だけを許可します。各スイッチを省略した更新では対応する環境変数を設定せず、従来動作を維持します。
 
 `-Execute` を指定していても、Endpoint切り替え確認で別の値または空文字を入力すると、新Runtimeバージョンの作成までで停止します。`DEFAULT`はAgentCoreにより新Versionへ自動更新されますが、本番用`PROD`は旧Versionのまま維持されます。
 

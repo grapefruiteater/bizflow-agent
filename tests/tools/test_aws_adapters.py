@@ -166,6 +166,7 @@ def test_dynamo_store_enforces_approval_exact_match_and_idempotency() -> None:
     approved = store.approve(approval["approval_id"], "team-manager")
     assert approved["status"] == "APPROVED"
     assert approved["approved_by"] == "team-manager"
+    assert store.get_approval(approval["approval_id"]) == approved
 
     with pytest.raises(BusinessToolError) as mismatch_error:
         store.create_task(

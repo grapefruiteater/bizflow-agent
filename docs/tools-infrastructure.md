@@ -4,7 +4,9 @@
 
 `BizFlowAgentToolsStack`のCDKソース、Lambda処理、S3/DynamoDB adapter、ユニットテストは実装済みです。TypeScript型チェック、CDKテンプレートテスト、`--no-lookups`付きローカルsynthも成功しています。
 
-このStackは2026-07-22にAWSへdeploy済みで、7つのOutputsはGit管理対象外の`config/tools-outputs.json`へ保存されています。現在稼働中のAgentCore Runtime VersionにはまだGateway URLを設定していないため、既存の`PROD` Endpointの動作は変わりません。Runtime接続ソースと直接スモークテストは追加済みですが、次のRuntime Versionを公開するまではAWS上で有効になりません。
+S3、DynamoDB、読み取り／書き込みLambda、Gatewayは2026-07-22にAWSへdeploy済みで、7つのOutputsはGit管理対象外の`config/tools-outputs.json`へ保存されています。AgentCore Runtime Version 4にはGateway URLが設定され、`PROD` Endpointから4つの読み取りツールを利用できます。Gateway直接スモークテスト、Runtimeスモークテスト、CloudWatch Logsへの出力を確認済みです。
+
+将来のBFFだけが呼び出す承認バックエンドLambdaもAWSへdeploy済みです。Outputsは9つとなり、`ApprovalWorkflowFunctionName`と`ApprovalWorkflowFunctionArn`が追加されています。承認要求・承認・DynamoDB監査履歴の実環境テストも完了しています。
 
 CDKアプリでは`enableTools`の既定値を`false`にしています。次を明示した場合だけTools Stackをsynth対象に追加します。
 
@@ -24,6 +26,7 @@ CDKアプリでは`enableTools`の既定値を`false`にしています。次を
 | DynamoDB Table | 承認、タスク、監査イベントを永続化 | On-demand、PITR、削除保護、暗号化、削除時retain |
 | Read Lambda | 4つの読み取りツールを処理 | S3 `GetObject`、DynamoDB `GetItem`/`Query`のみ |
 | Write Lambda | `create_business_task`だけを処理 | DynamoDB `GetItem`/`PutItem`/`Query`/`UpdateItem`のみ |
+| Approval Lambda | BFFから承認要求・承認・却下・状態取得を処理 | DynamoDB `GetItem`/`PutItem`/`Query`/`UpdateItem`のみ。Gateway非公開 |
 | AgentCore Gateway | LambdaをMCPツールとして公開 | IAM認証、MCP `2025-06-18`、2つのLambda target |
 | Runtime IAM Policy | importした既存RuntimeロールからGatewayを呼び出す | 対象Gateway ARNへの`bedrock-agentcore:InvokeGateway`のみ |
 | CloudWatch Logs | Lambdaログ | 30日保持、Log Groupは削除時retain |
@@ -60,7 +63,7 @@ Tableのpartition keyは`pk`、sort keyは`sk`です。
 - 同じ承認・同じ内容を再送した場合は既存タスクを返す
 - 承認要求、承認／却下、登録、登録拒否を監査イベントへ記録する
 
-承認要求と承認／却下を操作するWeb/BFF APIは次工程です。現時点でGatewayへ定義する5ツールには承認状態を変更するツールを含めません。
+承認要求と承認／却下を操作するLambda backendはAWSへ反映済みです。Web/BFFとCognito連携は今後の工程です。現時点でGatewayへ定義する5ツールには承認状態を変更するツールを含めません。
 
 ## Lambda adapterの選択
 
@@ -87,6 +90,8 @@ Tools Stackは次を出力します。
 - `BusinessToolsGatewayUrl`
 - `ReadToolsFunctionName`
 - `WriteToolsFunctionName`
+- `ApprovalWorkflowFunctionName`
+- `ApprovalWorkflowFunctionArn`
 
 将来のRuntime接続とWeb/BFF構築では、値をソースコードへ埋め込まず、このOutputsまたは環境別設定から参照します。
 
@@ -108,7 +113,7 @@ npx cdk synth BizFlowAgentToolsStack `
 
 ## AWSへ反映した手順と次工程
 
-Tools Stackの初回反映では、対象Account、Region、作成リソース、費用、既存RuntimeロールへのIAM Policy追加を確認しました。次の1〜8は完了、9以降が次工程です。
+Tools Stackの初回反映では、対象Account、Region、作成リソース、費用、既存RuntimeロールへのIAM Policy追加を確認しました。次の1〜10は完了しています。
 
 1. IAM Identity Centerの対象SSO profileと`ap-northeast-1`を確認する。
 2. `config/cdk-outputs.json`から`AgentRuntimeExecutionRoleArn`を取得する。
@@ -120,7 +125,13 @@ Tools Stackの初回反映では、対象Account、Region、作成リソース�
 8. S3の2オブジェクト、DynamoDB設定、Lambda環境変数とIAM、Gateway target状態をAWSコンソールで確認する。
 9. Gatewayの読み取りツールを直接スモークテストする。
 10. Runtimeへはまず読み取りツールだけを接続し、新しいRuntime Versionを`READY`まで確認してから`PROD`へ昇格する。
-11. Web/BFF承認APIを実装し、未承認拒否を確認してから書き込みツールを公開する。
+11. 完了（ローカル）: Gatewayから分離した承認バックエンドLambda、IAM、Outputs、テストを追加する。
+12. 完了: Tools Stackの差分が承認Lambda、ロググループ、IAM Policy、2 Outputsだけであることを確認する。
+13. 完了: Tools Stackへ反映し、承認状態とDynamoDB監査履歴を確認する。
+14. 次工程: Code InterpreterをRuntimeへ反映する。
+15. AgentCore Memoryを追加する。
+16. 最後にCognito、Next.js/BFF、ECS/Fargateを追加し、BFFロールへ承認Lambdaのinvoke権限だけを付与する。
+17. E2Eで未承認拒否と承認後登録を確認してから、書き込みツールをRuntimeへ公開する。
 
 新規環境で同じTools Stackを構築する場合のコマンド例です。
 

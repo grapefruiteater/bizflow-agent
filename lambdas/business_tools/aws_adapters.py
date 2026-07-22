@@ -128,6 +128,10 @@ class DynamoWorkflowStore:
     def reject(self, approval_id: str, rejected_by: str) -> dict[str, Any]:
         return self._decide(approval_id, rejected_by, "REJECTED")
 
+    def get_approval(self, approval_id: str) -> dict[str, Any]:
+        normalized_id = require_text(approval_id, "approval_id", 64)
+        return self._public_approval(self._get_approval_item(normalized_id))
+
     def create_task(
         self,
         approval_id: str,

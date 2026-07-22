@@ -29,7 +29,9 @@ param(
     [string]$LocalBaseUrl,
 
     [ValidateNotNullOrEmpty()]
-    [string]$Prompt = "Return a short BizFlow Agent health confirmation."
+    [string]$Prompt = "Return a short BizFlow Agent health confirmation.",
+
+    [string]$ExpectedResponsePattern
 )
 
 Set-StrictMode -Version Latest
@@ -91,6 +93,10 @@ function Assert-SmokeResponse {
     if ($null -eq $Response.PSObject.Properties["write_operations_performed"] -or
         [bool]$Response.write_operations_performed) {
         throw "Invocation response did not confirm that no write operation was performed."
+    }
+    if ($ExpectedResponsePattern -and
+        [string]$Response.response -notmatch $ExpectedResponsePattern) {
+        throw "Invocation response did not match the expected response pattern."
     }
 }
 

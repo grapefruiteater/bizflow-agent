@@ -10,14 +10,16 @@
 
 | 段階 | 状態 | 内容 |
 |---|---|---|
-| AgentCore Runtime | AWSで稼働済み | Nova 2 Liteによる読み取り専用分析、構造化問い合わせの決定的判定、`PROD` Endpoint |
+| AgentCore Runtime | AWSで稼働済み | Version 4、Nova 2 Lite、Gateway読み取りツール、`PROD` Endpoint、CloudWatch Logs確認済み |
 | 架空業務データ | ローカル実装済み | 個人情報を含まないCSVとMarkdownの社内ルール |
 | Lambda業務ツール | CDK・ローカル実装済み | Gateway Lambda target互換の5ツール、S3/DynamoDB adapter、読み取り・書き込み関数の分離 |
 | Human-in-the-loop境界 | CDK・ローカル実装済み | DynamoDBで未承認拒否、承認後改変拒否、重複登録防止、監査記録 |
 | S3・DynamoDB・Lambda・Gateway | AWSへdeploy済み | 2026-07-22にTools Stackを反映し、Outputsを環境別設定へ保存 |
-| Runtimeからのツール選択 | ソース実装済み／AWS未反映 | SigV4 MCP clientで4つの読み取りツールだけを公開。次のRuntime Versionで有効化する |
-| Code Interpreter・Memory | 未接続 | CSV分析と会話継続を段階的に追加する |
-| Next.js・Fargate・Cognito | 未実装 | 最終デモ画面として追加する |
+| Runtimeからのツール選択 | AWSへ反映済み | Version 4でSigV4 MCP clientから4つの読み取りツールだけを公開 |
+| 承認バックエンドLambda | AWSへdeploy・検証済み | Gatewayから分離し、承認要求・承認・却下・状態取得を処理 |
+| Code Interpreter | ソース・IAM実装済み／AWS未反映 | 管理済みSandboxで集計・検算し、Lambda集計をフォールバックとして維持 |
+| AgentCore Memory | 未接続 | 会話継続と利用者・会社設定を段階的に追加する |
+| Next.js・Fargate・Cognito | 未実装 | フロントエンドとECSは最後の工程で追加する |
 
 構成図 [`bizflow_agent_architecture.drawio`](../bizflow_agent_architecture.drawio) は完成形の目標構成です。現在動いているリソースと目標構成を混同しないよう、上表を実装状況の基準とします。
 
@@ -49,7 +51,7 @@ AgentCore Gatewayへ登録するツール定義は [`tool-schema.json`](../lambd
 | `create_business_task` | 書き込み | バックエンドで承認を再検証し、承認内容と完全一致するタスクだけを登録 |
 | `get_task_status` | 読み取り | 登録済みタスク、承認ID、承認者、状態、監査イベントを取得 |
 
-現在の`analyze_request_data`はLambda互換モック内の決定的集計です。AgentCore Code Interpreter接続後はCSV集計とグラフ生成をCode Interpreterへ移し、このツール契約を維持したまま実装を交換します。
+`analyze_request_data`はLambda内の決定的集計として残します。新しい`analyze_business_data_with_code_interpreter`はGatewayまたは利用者から得たデータをAWS管理の隔離Sandboxで追加集計・検算します。現在はテキスト結果をLLMへ返す段階で、生成グラフのS3永続化は未実装です。
 
 ## Human-in-the-loop
 
@@ -64,7 +66,9 @@ AgentCore Gatewayへ登録するツール定義は [`tool-schema.json`](../lambd
 
 承認依頼、承認または却下、タスク登録、未承認・不一致による登録拒否はactorと時刻を持つ監査イベントとして記録し、`get_task_status`から時系列で確認できます。
 
-ローカルデモではメモリ保持の`MockWorkflowStore`を使います。Lambda環境では`DynamoWorkflowStore`へ切り替わり、承認、タスク、監査イベントを単一テーブルへ永続化します。承認要求と承認／却下を操作するWeb/BFF APIはまだ未実装なので、書き込みツールをRuntimeへ公開する前に追加します。
+ローカルデモではメモリ保持の`MockWorkflowStore`を使います。Lambda環境では`DynamoWorkflowStore`へ切り替わり、承認、タスク、監査イベントを単一テーブルへ永続化します。
+
+承認要求、承認、却下、状態取得を行うBFF向けLambdaはAWSへ反映済みで、DynamoDBの承認本体と監査イベントを確認済みです。このLambdaはGateway targetにせず、将来のBFFからのみ呼び出します。Web画面、Cognito認証、BFFの利用者claims連携は最後の工程で追加します。
 
 ## 面接デモの完成フロー
 
@@ -82,17 +86,21 @@ AgentCore Gatewayへ登録するツール定義は [`tool-schema.json`](../lambd
 
 ## 今後の実装順序
 
-ツール基盤のCDKソースはFoundationと通常のRuntime更新から分離し、`enableTools=true`の場合だけ定義します。既存RuntimeロールARNはOutputsから自動取得します。次の1〜5は完了しています。6はRuntime接続ソースとスモークテストを実装済みで、AWSでの直接テストと新Runtime Versionの公開が残っています。
+ツール基盤のCDKソースはFoundationと通常のRuntime更新から分離し、`enableTools=true`の場合だけ定義します。既存RuntimeロールARNはOutputsから自動取得します。フロントエンドとECSは最後に追加し、それまでは業務処理、承認境界、分析機能を先に完成させます。
 
 1. 完了: S3へ架空CSVと社内ルールを配置する構成。
 2. 完了: DynamoDBへ承認、タスク、監査履歴を保存する構成とadapter。
 3. 完了: 読み取り用と書き込み用の権限を分離したLambda。
 4. 完了: AgentCore Gateway、2つのLambda target、5ツールのschema。
 5. 完了: CDK diffを確認し、明示承認後にTools Stackをdeployする。
-6. 進行中: Gatewayを直接スモークテストし、読み取りツールだけをRuntimeへ接続して試験する。
-7. Web/BFFの承認要求・承認・却下APIを追加する。
-8. 未承認拒否を確認してから書き込みツールをRuntimeへ公開する。
-9. Code Interpreter、Memory、Next.js/Fargate/Cognitoを順番に追加する。
+6. 完了: Gatewayを直接スモークテストし、読み取りツールだけをRuntime Version 4へ接続する。
+7. 完了: BFF専用の承認要求・承認・却下・状態取得Lambdaを追加する。
+8. 完了: Tools Stackへ承認Lambdaを反映し、承認状態と監査履歴を確認する。
+9. ソース完了・AWS未反映: 管理済みCode Interpreterを接続し、隔離環境で集計・検算する。
+10. 次工程: Foundation IAM差分と新Runtime Versionを反映してCode Interpreterをスモークテストする。
+11. AgentCore Memoryを接続し、利用者・会社設定を保持する。
+12. 最後にCognito、Next.js/BFF、ECS/Fargate、承認カードと実行履歴画面を追加する。
+13. Web承認フローのE2E検証後だけ、`create_business_task`をRuntimeの書き込み経路へ公開する。
 
 Tools Stackのリソース、IAM境界、データモデル、Outputs、反映前確認は [`tools-infrastructure.md`](tools-infrastructure.md) にまとめています。
 

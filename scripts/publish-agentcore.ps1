@@ -21,6 +21,11 @@ param(
 
     [string]$ToolsConfigPath,
 
+    [switch]$EnableCodeInterpreter,
+
+    [ValidateNotNullOrEmpty()]
+    [string]$CodeInterpreterId = "aws.codeinterpreter.v1",
+
     [switch]$Execute,
 
     [ValidateRange(60, 3600)]
@@ -413,6 +418,10 @@ if ($EnableReadTools) {
     $gatewayUrl = $gatewayUrl.TrimEnd('/')
 }
 
+if ($EnableCodeInterpreter -and $CodeInterpreterId -cne "aws.codeinterpreter.v1") {
+    throw "CodeInterpreterId must be 'aws.codeinterpreter.v1'. Custom Code Interpreter resources are not enabled by this publish workflow."
+}
+
 Assert-CommandExists -Name "aws"
 Assert-CommandExists -Name "git"
 Assert-CommandExists -Name "docker"
@@ -519,6 +528,10 @@ if ($gatewayUrl) {
     Write-Host "  Gateway:          $gatewayUrl"
     Write-Host "  Tools config:     $ToolsConfigPath"
 }
+Write-Host "  Code Interpreter: $([bool]$EnableCodeInterpreter)"
+if ($EnableCodeInterpreter) {
+    Write-Host "  Interpreter ID:   $CodeInterpreterId"
+}
 if ($existingImageDigest) {
     Write-Host "  Existing digest:  $existingImageDigest" -ForegroundColor Yellow
 }
@@ -569,6 +582,8 @@ $record = [pscustomobject]@{
     modelId = $ModelId
     readToolsEnabled = [bool]$EnableReadTools
     gatewayUrl = $gatewayUrl
+    codeInterpreterEnabled = [bool]$EnableCodeInterpreter
+    codeInterpreterId = if ($EnableCodeInterpreter) { $CodeInterpreterId } else { $null }
     runtimeVersion = $null
     endpointName = $configuration.EndpointName
     metadataConfiguration = [ordered]@{
@@ -577,6 +592,7 @@ $record = [pscustomobject]@{
     previousEndpointVersion = $null
     endpointLiveVersion = $null
     smokeTest = "NOT_RUN"
+    codeInterpreterSmokeTest = if ($EnableCodeInterpreter) { "NOT_RUN" } else { "NOT_ENABLED" }
     failure = $null
     rollbackCommand = $null
 }
@@ -641,6 +657,9 @@ try {
     }
     if ($gatewayUrl) {
         $runtimeEnvironmentVariables["BIZFLOW_GATEWAY_URL"] = $gatewayUrl
+    }
+    if ($EnableCodeInterpreter) {
+        $runtimeEnvironmentVariables["BIZFLOW_CODE_INTERPRETER_ID"] = $CodeInterpreterId
     }
     $updateRequest = [ordered]@{
         agentRuntimeId = $configuration.AgentRuntimeId
@@ -719,6 +738,39 @@ try {
             throw "AgentCore smoke test failed with exit code $LASTEXITCODE."
         }
 
+        if ($EnableCodeInterpreter) {
+            $record.codeInterpreterSmokeTest = "RUNNING"
+            $recordPath = Write-DeploymentRecord -Record $record -Directory $DeploymentRecordDirectory -FileName $recordFileName
+            $challenge = "bizflow-code-interpreter-$gitCommit-$newRuntimeVersion"
+            $challengeBytes = [Text.Encoding]::UTF8.GetBytes($challenge)
+            $sha256 = [Security.Cryptography.SHA256]::Create()
+            try {
+                $digestBytes = $sha256.ComputeHash($challengeBytes)
+            }
+            finally {
+                $sha256.Dispose()
+            }
+            $expectedDigest = ($digestBytes | ForEach-Object { $_.ToString("x2") }) -join ""
+            $codeInterpreterPrompt = @"
+You must call analyze_business_data_with_code_interpreter and use Python to calculate the SHA-256 hexadecimal digest of the following exact UTF-8 string:
+$challenge
+Return the exact digest and state that AgentCore Code Interpreter was used. Do not estimate or calculate it without the tool.
+"@
+            & $smokeTestPath `
+                -AWS_PROFILE $AWS_PROFILE `
+                -AWS_REGION $AWS_REGION `
+                -AgentRuntimeId $configuration.AgentRuntimeId `
+                -AgentRuntimeArn $record.agentRuntimeArn `
+                -EndpointName $configuration.EndpointName `
+                -ExpectedRuntimeVersion $newRuntimeVersion `
+                -Prompt $codeInterpreterPrompt `
+                -ExpectedResponsePattern ([regex]::Escape($expectedDigest))
+            if ($LASTEXITCODE -ne 0) {
+                throw "AgentCore Code Interpreter smoke test failed with exit code $LASTEXITCODE."
+            }
+            $record.codeInterpreterSmokeTest = "PASSED"
+        }
+
         $record.smokeTest = "PASSED"
         $record.status = "SUCCEEDED"
         $recordPath = Write-DeploymentRecord -Record $record -Directory $DeploymentRecordDirectory -FileName $recordFileName
@@ -733,6 +785,9 @@ catch {
     $record.failure = $failureMessage
     if ($statusBeforeFailure -eq "SMOKE_TEST_RUNNING") {
         $record.smokeTest = "FAILED"
+        if ($record.codeInterpreterSmokeTest -eq "RUNNING") {
+            $record.codeInterpreterSmokeTest = "FAILED"
+        }
     }
     try {
         $recordPath = Write-DeploymentRecord -Record $record -Directory $DeploymentRecordDirectory -FileName $recordFileName

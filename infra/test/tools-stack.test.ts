@@ -56,7 +56,7 @@ describe("BizFlowAgentToolsStack", () => {
     });
   });
 
-  test("uses separate arm64 Lambda functions for read and write tools", () => {
+  test("uses separate arm64 Lambda functions for tools and approvals", () => {
     template.hasResourceProperties("AWS::Lambda::Function", {
       Architectures: ["arm64"],
       FunctionName: "bizflow-read-tools-test",
@@ -83,6 +83,17 @@ describe("BizFlowAgentToolsStack", () => {
         },
       },
     });
+    template.hasResourceProperties("AWS::Lambda::Function", {
+      Architectures: ["arm64"],
+      FunctionName: "bizflow-approval-workflow-test",
+      Handler: "approval_workflow.lambda_function.lambda_handler",
+      Runtime: "python3.12",
+      Environment: {
+        Variables: {
+          BIZFLOW_WORKFLOW_TABLE: Match.anyValue(),
+        },
+      },
+    });
   });
 
   test("keeps data permissions least-privilege and separated", () => {
@@ -96,6 +107,21 @@ describe("BizFlowAgentToolsStack", () => {
           Match.objectLike({
             Action: ["dynamodb:GetItem", "dynamodb:Query"],
             Sid: "ReadWorkflowState",
+          }),
+        ]),
+      },
+    });
+    template.hasResourceProperties("AWS::IAM::Policy", {
+      PolicyDocument: {
+        Statement: Match.arrayWith([
+          Match.objectLike({
+            Action: [
+              "dynamodb:GetItem",
+              "dynamodb:PutItem",
+              "dynamodb:Query",
+              "dynamodb:UpdateItem",
+            ],
+            Sid: "ManageApprovalWorkflow",
           }),
         ]),
       },
@@ -187,6 +213,8 @@ describe("BizFlowAgentToolsStack", () => {
       "BusinessToolsGatewayUrl",
       "ReadToolsFunctionName",
       "WriteToolsFunctionName",
+      "ApprovalWorkflowFunctionName",
+      "ApprovalWorkflowFunctionArn",
     ]) {
       template.hasOutput(outputName, {});
     }

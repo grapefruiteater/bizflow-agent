@@ -121,6 +121,27 @@ export class BizFlowAgentFoundationStack extends Stack {
       }),
     );
 
+    const managedCodeInterpreterArn = this.formatArn({
+      service: "bedrock-agentcore",
+      account: "aws",
+      resource: "code-interpreter",
+      resourceName: "*",
+      arnFormat: ArnFormat.SLASH_RESOURCE_NAME,
+    });
+    this.runtimeExecutionRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: "UseManagedCodeInterpreter",
+        actions: [
+          "bedrock-agentcore:StartCodeInterpreterSession",
+          "bedrock-agentcore:StopCodeInterpreterSession",
+          "bedrock-agentcore:GetCodeInterpreterSession",
+          "bedrock-agentcore:ListCodeInterpreterSessions",
+          "bedrock-agentcore:InvokeCodeInterpreter",
+        ],
+        resources: [managedCodeInterpreterArn],
+      }),
+    );
+
     if (props.bedrockModelAccess !== undefined) {
       this.addBedrockModelAccess(props.bedrockModelAccess);
     }

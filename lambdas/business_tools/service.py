@@ -48,6 +48,8 @@ class WorkflowStore(Protocol):
 
     def reject(self, approval_id: str, rejected_by: str) -> dict[str, Any]: ...
 
+    def get_approval(self, approval_id: str) -> dict[str, Any]: ...
+
     def create_task(
         self,
         approval_id: str,
@@ -168,6 +170,9 @@ class MockWorkflowStore:
             approval_id=approval_id,
         )
         return dict(approval)
+
+    def get_approval(self, approval_id: str) -> dict[str, Any]:
+        return dict(self._get_approval(approval_id))
 
     def create_task(
         self,

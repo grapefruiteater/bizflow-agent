@@ -8,6 +8,12 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 try:
+    from .code_interpreter_tools import (
+        CODE_INTERPRETER_ID_ENVIRONMENT_VARIABLE,
+        CodeInterpreterConfigurationError,
+        create_code_interpreter_analysis_tool,
+        validate_code_interpreter_id,
+    )
     from .gateway_tools import (
         GATEWAY_URL_ENVIRONMENT_VARIABLE,
         READ_ONLY_BUSINESS_TOOL_NAMES,
@@ -18,6 +24,12 @@ try:
         validate_gateway_url,
     )
 except ImportError:  # The container starts this module directly from /app.
+    from code_interpreter_tools import (
+        CODE_INTERPRETER_ID_ENVIRONMENT_VARIABLE,
+        CodeInterpreterConfigurationError,
+        create_code_interpreter_analysis_tool,
+        validate_code_interpreter_id,
+    )
     from gateway_tools import (
         GATEWAY_URL_ENVIRONMENT_VARIABLE,
         READ_ONLY_BUSINESS_TOOL_NAMES,
@@ -68,6 +80,17 @@ S3、DynamoDB、社内ルールを参照したと説明できるのは、対応�
 create_business_taskは利用できません。タスク登録を依頼されても実行せず、承認待ちの提案だけを返してください。
 """
 
+CODE_INTERPRETER_SYSTEM_PROMPT = """\
+
+AgentCore Code Interpreterの`analyze_business_data_with_code_interpreter`を利用できます。
+- 複数件の集計、割合、傾向、クロス集計、計算結果の検算に使用してください。
+- Gatewayまたは利用者から得た業務データだけをPythonコードへ含めてください。
+- AWSサービス、ネットワーク、認証情報、ローカル業務システムへのアクセスには使用しないでください。
+- Pythonコードは短く保ち、request_idを保持したまま計算根拠を出力してください。
+- Code Interpreterを実際に呼び出して成功した場合だけ、回答で利用したと説明してください。
+- `analyze_request_data`の決定的判定と矛盾した場合は、その判定を優先し、差異を明示してください。
+"""
+
 
 class AgentConfigurationError(RuntimeError):
     """Raised when required runtime configuration is unavailable."""
@@ -87,6 +110,7 @@ class AgentSettings:
     region_name: str | None = None
     provider: str = "bedrock"
     gateway_url: str | None = None
+    code_interpreter_id: str | None = None
 
     @classmethod
     def from_environment(
@@ -108,6 +132,10 @@ class AgentSettings:
 
         region_name = values.get(MODEL_REGION_ENVIRONMENT_VARIABLE, "").strip()
         gateway_url = values.get(GATEWAY_URL_ENVIRONMENT_VARIABLE, "").strip()
+        code_interpreter_id = values.get(
+            CODE_INTERPRETER_ID_ENVIRONMENT_VARIABLE,
+            "",
+        ).strip()
         if gateway_url:
             if provider != "bedrock":
                 raise AgentConfigurationError(
@@ -122,11 +150,29 @@ class AgentSettings:
                 gateway_url = validate_gateway_url(gateway_url, region_name)
             except GatewayConfigurationError as exc:
                 raise AgentConfigurationError(str(exc)) from exc
+        if code_interpreter_id:
+            if provider != "bedrock":
+                raise AgentConfigurationError(
+                    f"{CODE_INTERPRETER_ID_ENVIRONMENT_VARIABLE} is available only "
+                    "with the bedrock provider."
+                )
+            if not region_name:
+                raise AgentConfigurationError(
+                    f"{MODEL_REGION_ENVIRONMENT_VARIABLE} is required when "
+                    f"{CODE_INTERPRETER_ID_ENVIRONMENT_VARIABLE} is set."
+                )
+            try:
+                code_interpreter_id = validate_code_interpreter_id(
+                    code_interpreter_id
+                )
+            except CodeInterpreterConfigurationError as exc:
+                raise AgentConfigurationError(str(exc)) from exc
         return cls(
             model_id=model_id or "local-test",
             region_name=region_name or None,
             provider=provider,
             gateway_url=gateway_url or None,
+            code_interpreter_id=code_interpreter_id or None,
         )
 
 
@@ -167,11 +213,26 @@ def create_strands_agent(settings: AgentSettings) -> AgentRunner:
         max_tokens=2048,
         streaming=False,
     )
+    code_interpreter_tools: list[Any] = []
+    code_interpreter_prompt = ""
+    if settings.code_interpreter_id:
+        if not settings.region_name:
+            raise AgentConfigurationError(
+                f"{MODEL_REGION_ENVIRONMENT_VARIABLE} is required for Code Interpreter."
+            )
+        code_interpreter_tools.append(
+            create_code_interpreter_analysis_tool(
+                settings.region_name,
+                settings.code_interpreter_id,
+            )
+        )
+        code_interpreter_prompt = CODE_INTERPRETER_SYSTEM_PROMPT
+
     def build_agent(tools: list[Any], system_prompt: str) -> AgentRunner:
         return Agent(
             model=model,
             system_prompt=system_prompt,
-            tools=tools,
+            tools=[*tools, *code_interpreter_tools],
             callback_handler=None,
             load_tools_from_directory=False,
         )
@@ -186,10 +247,13 @@ def create_strands_agent(settings: AgentSettings) -> AgentRunner:
                 settings.gateway_url,
                 settings.region_name,
             ),
-            agent_builder=lambda tools: build_agent(tools, READ_TOOLS_SYSTEM_PROMPT),
+            agent_builder=lambda tools: build_agent(
+                tools,
+                READ_TOOLS_SYSTEM_PROMPT + code_interpreter_prompt,
+            ),
         )
 
-    return build_agent([], NO_TOOLS_SYSTEM_PROMPT)
+    return build_agent([], NO_TOOLS_SYSTEM_PROMPT + code_interpreter_prompt)
 
 
 class LocalTestAgent:

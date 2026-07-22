@@ -31,6 +31,7 @@ export interface BizFlowAgentToolsStackProps extends StackProps {
 }
 
 export class BizFlowAgentToolsStack extends Stack {
+  public readonly approvalWorkflowFunction: lambda.Function;
   public readonly dataBucket: s3.Bucket;
   public readonly gateway: bedrockagentcore.Gateway;
   public readonly readToolsFunction: lambda.Function;
@@ -136,6 +137,24 @@ export class BizFlowAgentToolsStack extends Stack {
       }),
     );
 
+    this.approvalWorkflowFunction = this.createApprovalWorkflowFunction(
+      lambdaCode,
+      this.workflowTable.tableName,
+      props.environmentName,
+    );
+    this.approvalWorkflowFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: "ManageApprovalWorkflow",
+        actions: [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:Query",
+          "dynamodb:UpdateItem",
+        ],
+        resources: [this.workflowTable.tableArn],
+      }),
+    );
+
     this.gateway = new bedrockagentcore.Gateway(this, "BusinessToolsGateway", {
       gatewayName: `bizflow-tools-${props.environmentName}`,
       description: "BizFlow portfolio business tools",
@@ -214,6 +233,43 @@ export class BizFlowAgentToolsStack extends Stack {
     });
     new CfnOutput(this, "WriteToolsFunctionName", {
       value: this.writeToolsFunction.functionName,
+    });
+    new CfnOutput(this, "ApprovalWorkflowFunctionName", {
+      description: "Lambda function invoked by the future trusted BFF approval API",
+      value: this.approvalWorkflowFunction.functionName,
+    });
+    new CfnOutput(this, "ApprovalWorkflowFunctionArn", {
+      description: "ARN used to grant the future BFF least-privilege invoke access",
+      value: this.approvalWorkflowFunction.functionArn,
+    });
+  }
+
+  private createApprovalWorkflowFunction(
+    code: lambda.Code,
+    workflowTableName: string,
+    environmentName: string,
+  ): lambda.Function {
+    const functionName = `bizflow-approval-workflow-${environmentName}`;
+    const logGroup = new logs.LogGroup(this, "ApprovalWorkflowFunctionLogGroup", {
+      logGroupName: `/aws/lambda/${functionName}`,
+      retention: logs.RetentionDays.ONE_MONTH,
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
+    return new lambda.Function(this, "ApprovalWorkflowFunction", {
+      functionName,
+      architecture: lambda.Architecture.ARM_64,
+      runtime: lambda.Runtime.PYTHON_3_12,
+      handler: "approval_workflow.lambda_function.lambda_handler",
+      code,
+      description: "Trusted BizFlow approval workflow backend for the future BFF",
+      timeout: Duration.seconds(30),
+      memorySize: 256,
+      reservedConcurrentExecutions: 5,
+      tracing: lambda.Tracing.ACTIVE,
+      logGroup,
+      environment: {
+        BIZFLOW_WORKFLOW_TABLE: workflowTableName,
+      },
     });
   }
 

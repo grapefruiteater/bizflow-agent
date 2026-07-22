@@ -108,6 +108,37 @@ describe("BizFlowAgentFoundationStack", () => {
     );
   });
 
+  test("allows sessions only on the AWS-managed Code Interpreter", () => {
+    template.hasResourceProperties("AWS::IAM::Policy", {
+      PolicyDocument: {
+        Statement: Match.arrayWith([
+          Match.objectLike({
+            Action: [
+              "bedrock-agentcore:StartCodeInterpreterSession",
+              "bedrock-agentcore:StopCodeInterpreterSession",
+              "bedrock-agentcore:GetCodeInterpreterSession",
+              "bedrock-agentcore:ListCodeInterpreterSessions",
+              "bedrock-agentcore:InvokeCodeInterpreter",
+            ],
+            Resource: Match.anyValue(),
+            Sid: "UseManagedCodeInterpreter",
+          }),
+        ]),
+      },
+    });
+
+    const synthesizedTemplate = JSON.stringify(template.toJSON());
+    expect(synthesizedTemplate).toContain("bedrock-agentcore");
+    expect(synthesizedTemplate).toContain("ap-northeast-1");
+    expect(synthesizedTemplate).toContain(":aws:code-interpreter/*");
+    expect(synthesizedTemplate).not.toContain(
+      "bedrock-agentcore:CreateCodeInterpreter",
+    );
+    expect(synthesizedTemplate).not.toContain(
+      "bedrock-agentcore:DeleteCodeInterpreter",
+    );
+  });
+
   test("exports values needed by the initial runtime deployment", () => {
     template.hasOutput("EcrRepositoryUri", {});
     template.hasOutput("AgentRuntimeExecutionRoleArn", {});

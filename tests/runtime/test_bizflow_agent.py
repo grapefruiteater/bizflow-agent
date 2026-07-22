@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import pytest
+import strands
+import strands.models
 
+import agents.bizflow.bizflow_agent as bizflow_agent_module
 from agents.bizflow.bizflow_agent import (
     AgentConfigurationError,
     AgentSettings,
     BizFlowAnalyzer,
     ReadOnlyGatewayAgent,
+    create_strands_agent,
 )
 from agents.bizflow.gateway_tools import READ_ONLY_BUSINESS_TOOL_NAMES
 
@@ -37,6 +41,88 @@ def test_settings_reads_and_validates_gateway_url() -> None:
     )
 
     assert settings.gateway_url == gateway_url
+
+
+def test_settings_enables_managed_code_interpreter() -> None:
+    settings = AgentSettings.from_environment(
+        {
+            "BIZFLOW_MODEL_ID": "example.model-v1:0",
+            "BIZFLOW_AWS_REGION": "ap-northeast-1",
+            "BIZFLOW_CODE_INTERPRETER_ID": "aws.codeinterpreter.v1",
+        }
+    )
+
+    assert settings.code_interpreter_id == "aws.codeinterpreter.v1"
+
+
+def test_settings_rejects_unsupported_code_interpreter() -> None:
+    with pytest.raises(AgentConfigurationError, match="must be"):
+        AgentSettings.from_environment(
+            {
+                "BIZFLOW_MODEL_ID": "example.model-v1:0",
+                "BIZFLOW_AWS_REGION": "ap-northeast-1",
+                "BIZFLOW_CODE_INTERPRETER_ID": "custom-interpreter",
+            }
+        )
+
+
+def test_settings_rejects_code_interpreter_without_region() -> None:
+    with pytest.raises(AgentConfigurationError, match="BIZFLOW_AWS_REGION"):
+        AgentSettings.from_environment(
+            {
+                "BIZFLOW_MODEL_ID": "example.model-v1:0",
+                "BIZFLOW_CODE_INTERPRETER_ID": "aws.codeinterpreter.v1",
+            }
+        )
+
+
+def test_strands_agent_exposes_code_interpreter_only_when_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    code_tool = object()
+
+    class FakeBedrockModel:
+        def __init__(self, **kwargs) -> None:
+            captured["model"] = kwargs
+
+    class FakeAgent:
+        def __init__(self, **kwargs) -> None:
+            captured["agent"] = kwargs
+
+        def __call__(self, _prompt: str) -> str:
+            return "ok"
+
+    monkeypatch.setattr(strands.models, "BedrockModel", FakeBedrockModel)
+    monkeypatch.setattr(strands, "Agent", FakeAgent)
+    monkeypatch.setattr(
+        bizflow_agent_module,
+        "create_code_interpreter_analysis_tool",
+        lambda region, identifier: (
+            captured.update(
+                {"code_interpreter": (region, identifier)}
+            )
+            or code_tool
+        ),
+    )
+
+    agent = create_strands_agent(
+        AgentSettings(
+            model_id="example.model-v1:0",
+            region_name="ap-northeast-1",
+            code_interpreter_id="aws.codeinterpreter.v1",
+        )
+    )
+
+    assert isinstance(agent, FakeAgent)
+    assert captured["code_interpreter"] == (
+        "ap-northeast-1",
+        "aws.codeinterpreter.v1",
+    )
+    agent_options = captured["agent"]
+    assert isinstance(agent_options, dict)
+    assert agent_options["tools"] == [code_tool]
+    assert "AgentCore Code Interpreter" in agent_options["system_prompt"]
 
 
 def test_settings_rejects_gateway_without_region() -> None:

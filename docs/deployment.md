@@ -4,7 +4,7 @@
 
 開いている `bizflow-agent` リポジトリをそのまま使用します。スクリプトは自身の配置場所からリポジトリルートを解決するため、絶対パスをソースコードへ埋め込みません。
 
-この文書の中心は既存AgentCore Runtimeのコンテナ公開です。ポートフォリオ用のS3、DynamoDB、Lambda、AgentCore Gateway、承認バックエンドは2026-07-22にAWSへdeploy・検証済みです。Code InterpreterはソースとIAM差分を実装済みですがAWS未反映、Memory、ECS、Cognitoは未実装です。ツール基盤は [`tools-infrastructure.md`](tools-infrastructure.md)、Code Interpreterは [`code-interpreter.md`](code-interpreter.md)、全体の実装順序は [`portfolio-mvp.md`](portfolio-mvp.md) を参照してください。
+この文書の中心は既存AgentCore Runtimeのコンテナ公開です。ポートフォリオ用のS3、DynamoDB、Lambda、AgentCore Gateway、承認バックエンドは2026-07-22にAWSへdeploy・検証済みです。Code Interpreterはソース実装とFoundation IAMのdeployが完了し、次のRuntime Versionへの反映待ちです。Memory、ECS、Cognitoは未実装です。ツール基盤は [`tools-infrastructure.md`](tools-infrastructure.md)、Code Interpreterは [`code-interpreter.md`](code-interpreter.md)、全体の実装順序は [`portfolio-mvp.md`](portfolio-mvp.md) を参照してください。
 
 開発・デプロイ環境は次の構成です。
 
@@ -18,7 +18,7 @@
 
 以前のアプリやCDKスタックで作成したAWSリソースは再利用しません。今回のBizFlowアプリ専用CDKスタックとしてECR、IAMロール、ログ、ネットワーク設定、初期AgentCore Runtime、`PROD` Endpointを新規作成します。通常のアプリ更新では `cdk deploy` を実行せず、Dockerイメージのbuild/push、`UpdateAgentRuntime`、`PROD` Endpoint更新を使用します。サービス管理の`DEFAULT` Endpointは常に最新Versionを指すため、本番トラフィックには使用しません。
 
-> 2026-07-22時点ではRuntime Version 4が`PROD`で稼働し、Gateway URLを設定した読み取り専用分析が有効です。Gateway、S3、DynamoDB、読み取り／書き込みLambda、BFF向け承認LambdaはAWSへ反映済みで、リモートスモークテスト、承認監査履歴、`PROD`のCloudWatch Logs出力も確認済みです。Code Interpreterは次のRuntime Versionへ反映する前の段階です。
+> 2026-07-22時点ではRuntime Version 4が`PROD`で稼働し、Gateway URLを設定した読み取り専用分析が有効です。Gateway、S3、DynamoDB、読み取り／書き込みLambda、BFF向け承認LambdaはAWSへ反映済みで、リモートスモークテスト、承認監査履歴、`PROD`のCloudWatch Logs出力も確認済みです。Code InterpreterのFoundation IAM権限もdeploy済みですが、Version 4では未有効です。
 
 ## BizFlow専用AWS基盤の新規作成
 
@@ -43,6 +43,7 @@ CDKソースは `infra` に実装済みです。Foundation、Runtime、サービ
   - contextで指定したBedrock inference profileの呼び出し
   - profileの全送信先リージョンにある指定foundation modelの呼び出し
   - foundation model権限には `bedrock:InferenceProfileArn` 条件を設定
+  - AWS管理Code Interpreterのセッション開始・実行・参照・停止権限
 - Runtime作成時に使う `PUBLIC` の `networkConfiguration`
 
 他アプリのECR、IAMロール、VPC、セキュリティグループ、ロググループは参照しません。
@@ -234,13 +235,13 @@ npx cdk deploy BizFlowAgentRuntimeStack `
 
 この一度限りの移行が完了した後、通常更新ではCDKを実行しません。
 
-### 既存環境へのNova 2 Lite IAM追加
+### 既存環境へのNova 2 Lite・Code Interpreter IAM追加
 
 `jp.amazon.nova-2-lite-v1:0` は東京をsourceとして東京または大阪へ推論をルーティングします。既存Foundationの同一リージョン権限だけでは大阪側が不足するため、アプリの新Versionを公開する前にFoundation Stackを一度だけ更新します。
 
 既存Runtime StackとのCross-Stack Exportを維持するため、現在deploy済みの初期イメージdigestをcontextへ再指定します。これはRuntime StackをCDKアプリのsynth対象に残すための値であり、Foundation Stackだけを指定したdiff/deployではRuntimeを更新しません。
 
-まず現在のOutputsからdigestを取得し、次の差分だけを確認します。ここでは実行していません。
+現在のOutputsからdigestを取得し、次のコマンドで差分を確認しました。
 
 ```powershell
 $CurrentOutputs = Get-Content .\config\cdk-outputs.json -Raw | ConvertFrom-Json
@@ -258,7 +259,7 @@ npx cdk diff BizFlowAgentFoundationStack `
   --profile $AwsProfile
 ```
 
-期待する差分はRuntime実行ロールのIAM Policyと、`AllowedBedrockModelId`・`AllowedBedrockDestinationRegions`の追加だけです。既存の`ExportsOutput...`、ECR、Runtime、`DEFAULT`、`PROD`の削除や置換が表示された場合はdeployしません。差分が期待どおりなら、ユーザーの明示判断でFoundation Stackだけをdeployします。
+既存のNova 2 Lite権限に加え、今回はRuntime実行ロールへ`UseManagedCodeInterpreter` statementだけが追加され、既存の`ExportsOutput...`、ECR、Runtime、`DEFAULT`、`PROD`の削除や置換がないことを確認しました。その後、ユーザーの明示判断でFoundation Stackだけをdeployし、正常終了しています。
 
 ```powershell
 npx cdk deploy BizFlowAgentFoundationStack `
@@ -267,11 +268,10 @@ npx cdk deploy BizFlowAgentFoundationStack `
   --context "bedrockModelId=jp.amazon.nova-2-lite-v1:0" `
   --context "bedrockFoundationModelId=amazon.nova-2-lite-v1:0" `
   --context "bedrockModelDestinationRegions=ap-northeast-1,ap-northeast-3" `
-  --profile $AwsProfile `
-  --outputs-file .\config\foundation-outputs.json
+  --profile $AwsProfile
 ```
 
-このIAM更新が完了した後のアプリ更新ではCDKを実行せず、`publish-agentcore.ps1 -ModelId jp.amazon.nova-2-lite-v1:0`を使用します。Organizations SCPで大阪リージョンを拒否している場合も地理推論が失敗するため、AWS管理者による確認が必要です。
+このIAM更新は2026-07-22に完了しています。以後のアプリ更新ではCDKを実行せず、`publish-agentcore.ps1 -ModelId jp.amazon.nova-2-lite-v1:0 -EnableCodeInterpreter`を使用します。Organizations SCPで大阪リージョンを拒否している場合も地理推論が失敗するため、AWS管理者による確認が必要です。
 
 ## ディレクトリ構成
 
@@ -286,7 +286,7 @@ agents/bizflow/
   requirements-dev.txt
 config/
   agentcore.example.json
-  foundation-outputs.json  # Foundation deploy時に生成
+  foundation-outputs.json  # 初回Foundation deploy時に生成する任意の環境別Outputs
   cdk-outputs.json         # Runtime deploy時に生成
 docs/
   business-analysis.md

@@ -20,7 +20,7 @@ AWS基盤は、以前のアプリやCDKスタックで作成したリソース�
 | S3・DynamoDB・Lambda・Gateway | `BizFlowAgentToolsStack`としてdeploy済み |
 | CloudWatch Logs | `PROD`の呼び出しログを確認済み |
 | 承認バックエンドLambda | AWSへdeploy・動作確認済み |
-| Code Interpreter | ソース・IAM・公開設定・ローカルテスト実装済み、AWS未反映 |
+| Code Interpreter | Foundation IAM権限をdeploy済み。Runtime Version 4では未有効 |
 | AgentCore Memory | 未接続 |
 | Next.js・Cognito・ECS | 未実装。最後の工程で追加する |
 
@@ -44,7 +44,7 @@ Runtime環境変数`BIZFLOW_GATEWAY_URL`は`config/tools-outputs.json`から公�
 
 将来のWeb/BFFだけが呼び出す承認バックエンドLambdaもAWSへdeploy済みです。承認要求、状態確認、承認、DynamoDB監査履歴が正常に機能することを確認しました。このLambdaはAgentCore Gateway targetには登録せず、モデルから到達できない境界を維持しています。詳細は [`docs/approval-workflow.md`](docs/approval-workflow.md) を参照してください。
 
-次工程として、AWS管理の`aws.codeinterpreter.v1`を使うCode Interpreter分析ツールをRuntimeソースへ追加しました。セッションごとに隔離環境を開始・停止し、Gatewayまたは利用者から得たデータの集計・検算だけに使用します。既存の`analyze_request_data`は決定的なフォールバックとして残しています。この追加分はまだAWSへ反映していません。詳細は [`docs/code-interpreter.md`](docs/code-interpreter.md) を参照してください。ポートフォリオ全体は [`docs/portfolio-mvp.md`](docs/portfolio-mvp.md)、ツール基盤は [`docs/tools-infrastructure.md`](docs/tools-infrastructure.md) にまとめています。
+次工程として、AWS管理の`aws.codeinterpreter.v1`を使うCode Interpreter分析ツールをRuntimeソースへ追加しました。セッションごとに隔離環境を開始・停止し、Gatewayまたは利用者から得たデータの集計・検算だけに使用します。既存の`analyze_request_data`は決定的なフォールバックとして残しています。Runtime実行ロールの`UseManagedCodeInterpreter`権限はFoundation Stackへdeploy済みです。現在稼働中のRuntime Version 4には環境変数と新イメージをまだ反映していないため、Code Interpreter自体は次のRuntime Versionから有効になります。詳細は [`docs/code-interpreter.md`](docs/code-interpreter.md) を参照してください。ポートフォリオ全体は [`docs/portfolio-mvp.md`](docs/portfolio-mvp.md)、ツール基盤は [`docs/tools-infrastructure.md`](docs/tools-infrastructure.md) にまとめています。
 
 採用モデルはAmazon Nova 2 LiteのJP地理推論profileです。
 
@@ -260,6 +260,8 @@ AgentCore Runtimeは、空のECRリポジトリだけでは作成できません
 
 FoundationとRuntimeの初期構築、および`PROD` Endpointの動作確認は完了しています。上記は新規環境で再現する場合の順序です。
 
+2026-07-22に、Runtime実行ロールへAWS管理Code Interpreterのセッション利用権限を追加するFoundation更新も完了しました。この更新では既存のECR、Runtime、Endpoint、Cross-Stack Exportを変更していません。
+
 ### 業務ツール基盤の追加
 
 `BizFlowAgentToolsStack`はFoundationと通常のRuntime更新から分離しています。`enableTools=true`の場合だけ、合成データ用S3、承認・タスク・監査用DynamoDB、読み取り／書き込みLambda、承認バックエンドLambda、AgentCore GatewayをCDKアプリへ追加します。既存RuntimeロールARNは`config/cdk-outputs.json`から取得し、ソースへ埋め込みません。
@@ -359,6 +361,8 @@ docker run --rm --platform linux/arm64 `
   -ToolsConfigPath .\config\tools-outputs.json
 ```
 
-`ModelId`は採用済みのJP地理推論profileを明示します。`-EnableCodeInterpreter`はRuntime環境変数へ`BIZFLOW_CODE_INTERPRETER_ID=aws.codeinterpreter.v1`を追加します。dry-runではGateway URL、読み取りツール、Code Interpreterの有効状態を表示します。Foundation StackへIAM差分を反映し、内容をコミットした後、同じ引数へ`-Execute`を追加した場合だけイメージpushとRuntime更新を行います。具体的な確認順序は [`docs/deployment.md`](docs/deployment.md) に記載しています。
+`ModelId`は採用済みのJP地理推論profileを明示します。`-EnableCodeInterpreter`はRuntime環境変数へ`BIZFLOW_CODE_INTERPRETER_ID=aws.codeinterpreter.v1`を追加します。dry-runではGateway URL、読み取りツール、Code Interpreterの有効状態を表示します。Foundation IAM差分はdeploy済みです。今回の文書更新も含めてworktreeをコミットした後、同じ引数へ`-Execute`を追加した場合だけイメージpushとRuntime更新を行います。具体的な確認順序は [`docs/deployment.md`](docs/deployment.md) に記載しています。
+
+Code Interpreterを有効化する次のRuntime更新では、上記dry-runの確認後に同じ引数へ`-Execute`を追加します。公開スクリプトは通常のRuntime確認に加え、毎回異なる文字列のSHA-256をCode InterpreterのPythonで計算させます。期待digestと応答が一致した場合だけ、デプロイ記録の`codeInterpreterSmokeTest`を`PASSED`にします。CloudWatch Logsで`Starting Code Interpreter analysis`と`Code Interpreter analysis completed`も確認すると、ツールが実際に呼ばれ、セッションが正常終了したことを追跡できます。独立した再試験手順と合格条件は [`docs/code-interpreter.md`](docs/code-interpreter.md) に記載しています。
 
 `publish-agentcore.ps1` はAWS基盤を作成しません。初期基盤はBizFlow専用CDKスタックで新規作成し、通常更新時には `cdk deploy` を実行しません。詳細は [`docs/deployment.md`](docs/deployment.md) を参照してください。

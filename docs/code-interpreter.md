@@ -2,7 +2,9 @@
 
 ## 現在の状態
 
-AWS管理のAgentCore Code Interpreter `aws.codeinterpreter.v1`を、BizFlow Runtimeの読み取り専用分析ツールとして使用するソース、IAM Policy、公開スクリプト、ローカルテストを実装済みです。現在稼働中のRuntime Version 4にはまだ反映していません。
+AWS管理のAgentCore Code Interpreter `aws.codeinterpreter.v1`を、BizFlow Runtimeの読み取り専用分析ツールとして使用するソース、IAM Policy、公開スクリプト、ローカルテストを実装済みです。2026-07-22にRuntime実行ロールの`UseManagedCodeInterpreter`権限をFoundation Stackへdeployし、既存リソースの削除・置換がないことも確認しました。
+
+現在稼働中のRuntime Version 4には、新しいイメージと`BIZFLOW_CODE_INTERPRETER_ID`をまだ反映していません。このため、IAMは準備済みですがCode Interpreterの実呼び出しは次のRuntime Versionから有効になります。
 
 専用Code Interpreterリソースは作成しません。AWSが提供する管理済みSystem Code Interpreterを使用し、追加の業務データアクセス権限や公開ネットワークを持たせません。
 
@@ -73,16 +75,89 @@ BIZFLOW_CODE_INTERPRETER_ID=aws.codeinterpreter.v1
 
 ## AWS反映順序
 
-1. すべてのソース変更をGitへコミットする。
-2. Foundation Stackのdiffで`UseManagedCodeInterpreter` IAM statementだけが追加されることを確認する。
-3. Foundation StackへIAM差分を反映する。
-4. `publish-agentcore.ps1`のdry-runへ`-EnableReadTools -EnableCodeInterpreter`を指定する。
+1. 完了: Code Interpreterのソース変更をGitへコミットする。Runtime公開前には、この状態更新を含む文書差分もコミットしてworktreeをcleanにする。
+2. 完了: Foundation Stackのdiffで`UseManagedCodeInterpreter` IAM statementだけが追加されることを確認する。
+3. 完了: Foundation StackへIAM差分を反映する。
+4. 次工程: `publish-agentcore.ps1`のdry-runへ`-EnableReadTools -EnableCodeInterpreter`を指定する。
 5. `-Execute`で新Runtime Versionを作成する。
 6. `READY`後、明示確認して`PROD`を新Versionへ切り替える。
 7. 公開スクリプトがランダムな文字列のSHA-256をPythonで計算させ、期待digestとの一致を確認する。
-8. CloudWatch LogsとAgentCore observabilityでセッション開始・完了を確認する。
+8. CloudWatch Logsでセッション開始・完了を確認する。
 
 Foundation IAM変更とRuntime更新は別の変更として実行します。Code Interpreter用の新しいAWSリソースは作成しません。
+
+## 機能確認
+
+### 1. dry-run
+
+まず通常更新をdry-runし、対象アカウント、ECR、Runtime、`PROD` Endpointを確認します。
+
+```powershell
+.\scripts\publish-agentcore.ps1 `
+  -AWS_PROFILE <SSOプロファイル名> `
+  -AWS_REGION ap-northeast-1 `
+  -ModelId jp.amazon.nova-2-lite-v1:0 `
+  -ConfigPath .\config\cdk-outputs.json `
+  -StackName BizFlowAgentRuntimeStack `
+  -EnableReadTools `
+  -EnableCodeInterpreter `
+  -ToolsConfigPath .\config\tools-outputs.json
+```
+
+次の表示を確認します。
+
+- `Endpoint: PROD`
+- `Read tools: True`
+- `Code Interpreter: True`
+- `Interpreter ID: aws.codeinterpreter.v1`
+- `DRY RUN`で終了し、build、push、Runtime更新、Endpoint更新を実行していない
+
+### 2. Runtime更新と自動スモークテスト
+
+dry-runが正常なら、同じコマンドの最後へ`-Execute`を追加します。新Runtime Versionが`READY`になった後、表示された新バージョン番号を手入力した場合だけ`PROD`を切り替えます。
+
+公開スクリプトは切り替え後、次の2種類を自動確認します。
+
+1. Runtime応答契約が`status=success`、`execution_mode=READ_ONLY`、`write_operations_performed=false`であること。
+2. Git SHAと新Runtime Versionから作った文字列のSHA-256を、`analyze_business_data_with_code_interpreter`のPythonで計算し、ローカルで計算した期待digestと応答が一致すること。
+
+成功時は次を確認します。
+
+- `Smoke test succeeded.`が2回表示される。
+- 最終結果が`Deployment succeeded.`になる。
+- `deployments/agentcore/*.json`の`status`が`SUCCEEDED`になる。
+- 同じ記録の`smokeTest`と`codeInterpreterSmokeTest`がどちらも`PASSED`になる。
+- `runtimeVersion`と`endpointLiveVersion`が同じ新バージョンになる。
+
+### 3. CloudWatch Logs
+
+`/aws/bedrock-agentcore/runtimes/<Runtime ID>-PROD`ロググループで、スモークテスト時刻付近の次のアプリケーションログを確認します。
+
+```text
+Starting Code Interpreter analysis
+Code Interpreter analysis completed
+```
+
+CloudWatch Logs Insightsでは次のクエリで絞り込めます。
+
+```text
+fields @timestamp, @message
+| filter @message like /Code Interpreter analysis/
+| sort @timestamp desc
+| limit 20
+```
+
+SHA-256一致だけでなく、この開始・完了ログも揃えば、LLMがCode Interpreterツールを選択し、セッションが正常終了したことを確認できます。エラー時は公開スクリプトが`FAILED`を記録し、`PROD`を旧バージョンへ戻すコマンドを表示します。
+
+### 4. コンソールからの追加確認
+
+AgentCoreコンソールの`PROD` Endpointへ、次のようにツール利用を明示したプロンプトを送ります。
+
+```text
+必ずanalyze_business_data_with_code_interpreterを呼び出し、Pythonで1から100までの整数の二乗和を計算してください。計算結果と、AgentCore Code Interpreterを使用したことを回答してください。
+```
+
+期待値は`338350`です。応答の値、実行時刻付近の開始・完了ログ、新Runtime Versionを合わせて確認します。値だけではツール利用の証明にならないため、CloudWatch Logsも確認します。
 
 ## ローカル検証
 

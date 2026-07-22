@@ -17,7 +17,7 @@
 | S3・DynamoDB・Lambda・Gateway | AWSへdeploy済み | 2026-07-22にTools Stackを反映し、Outputsを環境別設定へ保存 |
 | Runtimeからのツール選択 | AWSへ反映済み | Version 4でSigV4 MCP clientから4つの読み取りツールだけを公開 |
 | 承認バックエンドLambda | AWSへdeploy・検証済み | Gatewayから分離し、承認要求・承認・却下・状態取得を処理 |
-| Code Interpreter | ソース・IAM実装済み／AWS未反映 | 管理済みSandboxで集計・検算し、Lambda集計をフォールバックとして維持 |
+| Code Interpreter | Foundation IAM deploy済み／Runtime未反映 | 管理済みSandboxで集計・検算し、Lambda集計をフォールバックとして維持 |
 | AgentCore Memory | 未接続 | 会話継続と利用者・会社設定を段階的に追加する |
 | Next.js・Fargate・Cognito | 未実装 | フロントエンドとECSは最後の工程で追加する |
 
@@ -96,8 +96,8 @@ AgentCore Gatewayへ登録するツール定義は [`tool-schema.json`](../lambd
 6. 完了: Gatewayを直接スモークテストし、読み取りツールだけをRuntime Version 4へ接続する。
 7. 完了: BFF専用の承認要求・承認・却下・状態取得Lambdaを追加する。
 8. 完了: Tools Stackへ承認Lambdaを反映し、承認状態と監査履歴を確認する。
-9. ソース完了・AWS未反映: 管理済みCode Interpreterを接続し、隔離環境で集計・検算する。
-10. 次工程: Foundation IAM差分と新Runtime Versionを反映してCode Interpreterをスモークテストする。
+9. 完了: 管理済みCode Interpreterのソースを実装し、Foundation IAM差分をdeployする。
+10. 次工程: 新Runtime VersionへCode Interpreterを反映し、SHA-256課題とCloudWatch Logsで実呼び出しを確認する。
 11. AgentCore Memoryを接続し、利用者・会社設定を保持する。
 12. 最後にCognito、Next.js/BFF、ECS/Fargate、承認カードと実行履歴画面を追加する。
 13. Web承認フローのE2E検証後だけ、`create_business_task`をRuntimeの書き込み経路へ公開する。

@@ -1,0 +1,160 @@
+"""Direct AgentCore Gateway smoke test invoked by smoke-test-gateway.ps1."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+import uuid
+from collections.abc import Mapping
+from pathlib import Path
+from typing import Any
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
+
+from agents.bizflow.gateway_tools import (  # noqa: E402
+    ALL_BUSINESS_TOOL_NAMES,
+    business_tool_name,
+    create_gateway_mcp_client,
+)
+
+
+ROOT_ARN_PATTERN = re.compile(r"^arn:aws(?:-[a-z]+)*:iam::\d{12}:root$")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--profile", required=True)
+    parser.add_argument("--region", required=True)
+    parser.add_argument("--gateway-url", required=True)
+    parser.add_argument("--start-date", default="2026-07-10")
+    parser.add_argument("--end-date", default="2026-07-13")
+    parser.add_argument("--as-of", default="2026-07-13")
+    return parser.parse_args()
+
+
+def require_success_payload(result: Mapping[str, Any], tool_name: str) -> dict[str, Any]:
+    if result.get("status") != "success" or result.get("isError") is True:
+        raise RuntimeError(f"Gateway tool {tool_name} failed: {result}")
+
+    candidates: list[Any] = []
+    structured_content = result.get("structuredContent")
+    if structured_content is not None:
+        candidates.append(structured_content)
+    for content in result.get("content", []):
+        if not isinstance(content, Mapping):
+            continue
+        if "json" in content:
+            candidates.append(content["json"])
+        text = content.get("text")
+        if isinstance(text, str):
+            try:
+                candidates.append(json.loads(text))
+            except json.JSONDecodeError:
+                continue
+
+    for candidate in candidates:
+        if isinstance(candidate, Mapping):
+            payload = dict(candidate)
+            if payload.get("ok") is False:
+                raise RuntimeError(f"Gateway tool {tool_name} was rejected: {payload}")
+            return payload
+    raise RuntimeError(f"Gateway tool {tool_name} returned no JSON object: {result}")
+
+
+def invoke_tool(client: Any, actual_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    result = client.call_tool_sync(
+        tool_use_id=str(uuid.uuid4()),
+        name=actual_name,
+        arguments=arguments,
+    )
+    return require_success_payload(result, business_tool_name(actual_name))
+
+
+def main() -> int:
+    args = parse_args()
+
+    import boto3
+
+    session = boto3.Session(profile_name=args.profile, region_name=args.region)
+    identity = session.client("sts", region_name=args.region).get_caller_identity()
+    caller_arn = str(identity["Arn"])
+    print(f"Gateway smoke-test caller: {caller_arn}")
+    if ROOT_ARN_PATTERN.fullmatch(caller_arn):
+        raise RuntimeError("Smoke testing as the AWS account root user is prohibited.")
+
+    client = create_gateway_mcp_client(
+        args.gateway_url,
+        args.region,
+        credentials_provider=session.get_credentials,
+        allowed_tool_names=ALL_BUSINESS_TOOL_NAMES,
+    )
+    with client:
+        tools = list(client.list_tools_sync())
+        tools_by_business_name = {
+            business_tool_name(tool.tool_name): tool.tool_name for tool in tools
+        }
+        missing = ALL_BUSINESS_TOOL_NAMES - tools_by_business_name.keys()
+        if missing:
+            raise RuntimeError(
+                "Gateway did not list the expected tools: " + ", ".join(sorted(missing))
+            )
+        print("Gateway tools/list: Passed (5 tools)")
+
+        requests_result = invoke_tool(
+            client,
+            tools_by_business_name["get_business_requests"],
+            {"start_date": args.start_date, "end_date": args.end_date},
+        )
+        requests_data = requests_result.get("data")
+        if not isinstance(requests_data, Mapping) or not requests_data.get("requests"):
+            raise RuntimeError("get_business_requests returned no requests.")
+        print(
+            "get_business_requests: Passed "
+            f"(count={requests_data.get('count', 'not-reported')})"
+        )
+
+        analysis_result = invoke_tool(
+            client,
+            tools_by_business_name["analyze_request_data"],
+            {
+                "as_of": args.as_of,
+                "requests": requests_data["requests"],
+            },
+        )
+        analysis_data = analysis_result.get("data")
+        if not isinstance(analysis_data, Mapping):
+            raise RuntimeError("analyze_request_data returned no analysis data.")
+        print(
+            "analyze_request_data: Passed "
+            f"(overdue={analysis_data.get('overdue_request_ids', [])})"
+        )
+
+        rules_result = invoke_tool(
+            client,
+            tools_by_business_name["search_company_rules"],
+            {"query": "障害 high 期限超過 請求", "category": "障害"},
+        )
+        rules_data = rules_result.get("data")
+        if not isinstance(rules_data, Mapping) or not rules_data.get("rules"):
+            raise RuntimeError("search_company_rules returned no matching rules.")
+        print(
+            "search_company_rules: Passed "
+            f"(count={rules_data.get('count', 'not-reported')})"
+        )
+
+    print("Gateway read-tool smoke test succeeded.")
+    print("create_business_task and get_task_status were not invoked.")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except Exception as exc:
+        print(f"Gateway smoke test failed: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc

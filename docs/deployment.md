@@ -4,6 +4,8 @@
 
 開いている `bizflow-agent` リポジトリをそのまま使用します。スクリプトは自身の配置場所からリポジトリルートを解決するため、絶対パスをソースコードへ埋め込みません。
 
+この文書の中心は既存AgentCore Runtimeのコンテナ公開です。ポートフォリオ用のS3、DynamoDB、Lambda、AgentCore Gatewayは独立した`BizFlowAgentToolsStack`として2026-07-22にAWSへdeploy済みです。Code Interpreter、Memory、ECS、Cognitoは未実装です。ツール基盤は [`tools-infrastructure.md`](tools-infrastructure.md)、全体の実装順序は [`portfolio-mvp.md`](portfolio-mvp.md) を参照してください。
+
 開発・デプロイ環境は次の構成です。
 
 - Windows 11ネイティブ
@@ -16,19 +18,19 @@
 
 以前のアプリやCDKスタックで作成したAWSリソースは再利用しません。今回のBizFlowアプリ専用CDKスタックとしてECR、IAMロール、ログ、ネットワーク設定、初期AgentCore Runtime、`PROD` Endpointを新規作成します。通常のアプリ更新では `cdk deploy` を実行せず、Dockerイメージのbuild/push、`UpdateAgentRuntime`、`PROD` Endpoint更新を使用します。サービス管理の`DEFAULT` Endpointは常に最新Versionを指すため、本番トラフィックには使用しません。
 
-> 現在のRuntimeはStrands AgentsとAmazon Bedrockモデルを使う読み取り専用分析まで実装しています。入力外のAWSデータは参照せず、タスク登録などの書き込みツールはまだ実装していません。
+> 現在AWSで稼働しているRuntime VersionはStrands AgentsとAmazon Bedrockモデルを使う入力ベースの読み取り専用分析までです。Gateway、永続ストア、読み取り／書き込みLambdaはAWSへ反映済みですが、稼働中VersionにはGateway URLをまだ設定していません。今回のソースを新Runtime Versionとして公開した後に読み取りツールが有効になります。
 
 ## BizFlow専用AWS基盤の新規作成
 
 ### 現在の状態
 
-CDKソースは `infra` に実装済みです。初期Foundation、Runtime Version 1、サービス管理`DEFAULT`に加え、Version 1を参照する明示昇格用`PROD` Endpointのデプロイ完了をAWSコンソールで確認済みです。採用モデルは `jp.amazon.nova-2-lite-v1:0` です。このprofileの東京・大阪モデル呼び出し権限を追加するFoundation Stackのソース変更は実装済みですが、AWS環境へのIAM更新はまだ実行していません。
+CDKソースは `infra` に実装済みです。Foundation、Runtime、サービス管理`DEFAULT`、明示昇格用`PROD` Endpoint、Tools Stackのデプロイは完了しています。`PROD`へのモデル応答もユーザーがAWSコンソールとスモークテストで確認済みです。採用モデルは `jp.amazon.nova-2-lite-v1:0` です。
 
 `config/cdk-outputs.json` はBizFlow専用スタックの実環境Outputsです。環境固有情報を含むためGit管理せず、Runtime Stackをdeployしたときだけ更新します。形式例は `config/agentcore.example.json` に保持します。
 
 ### スタック分割
 
-初期RuntimeはECR上のコンテナイメージを必要とします。空のECR作成とRuntime作成を一度に行わず、次の2スタックに分けます。
+初期RuntimeはECR上のコンテナイメージを必要とします。空のECR作成とRuntime作成を一度に行わず、FoundationとRuntimeを分けます。業務ツール基盤は既存Runtimeの通常更新から独立した3つ目のStackです。
 
 #### `BizFlowAgentFoundationStack`
 
@@ -54,6 +56,16 @@ CDKソースは `infra` に実装済みです。初期Foundation、Runtime Versi
 - 通常更新スクリプトへ渡すCDK Outputs
 
 初期構築では `AWS::BedrockAgentCore::Runtime` と、名前が `PROD` の `AWS::BedrockAgentCore::RuntimeEndpoint` をCDK/CloudFormation管理します。AgentCoreはRuntime作成時に初期Versionと `DEFAULT` Endpointを自動作成するため、`DEFAULT`はCloudFormationで重複作成しません。
+
+#### `BizFlowAgentToolsStack`（明示指定時のみ）
+
+- 合成CSVと社内ルールを格納するS3 Bucket
+- 承認、タスク、監査履歴を格納するDynamoDB Table
+- IAMと許可ツールを分けたRead LambdaとWrite Lambda
+- IAM認証のAgentCore Gatewayと2つのLambda target
+- 既存Runtime実行ロールから対象Gatewayだけを呼び出すIAM Policy
+
+`enableTools=true`の場合だけCDKアプリへ追加されます。既存RuntimeロールARNは既定で`config/cdk-outputs.json`から自動取得し、既存ロールをimportします。Tools StackからFoundation Stackへのcross-stack参照やdeploy依存はありません。このStackのAWS反映手順と検証項目は [`tools-infrastructure.md`](tools-infrastructure.md) に分離しています。
 
 ### 初期構築の実行順序
 
@@ -279,19 +291,29 @@ config/
 docs/
   business-analysis.md
   deployment.md
+  portfolio-mvp.md
+  tools-infrastructure.md
 infra/
   bin/bizflow-agent.ts
   lib/foundation-stack.ts
   lib/runtime-stack.ts
+  lib/tools-stack.ts
   test/foundation-stack.test.ts
   test/runtime-stack.test.ts
+  test/tools-stack.test.ts
+lambdas/business_tools/
+  aws_adapters.py
+  lambda_function.py
+  service.py
+  tool-schema.json
+  data/
 scripts/
+  demo-business-tools.py
   publish-agentcore.ps1
   smoke-test-agentcore.ps1
-tests/runtime/
-  test_bizflow_agent.py
-  test_business_data.py
-  test_endpoints.py
+tests/
+  runtime/
+  tools/
 deployments/agentcore/
   <実行時に生成されるデプロイ記録>.json
 cdk.json
@@ -339,10 +361,10 @@ aws sso login --profile <SSOプロファイル名>
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --requirement .\agents\bizflow\requirements-dev.txt
-python -m pytest .\tests\runtime
+python -m pytest .\tests
 ```
 
-このテストはAWSへ接続しません。`GET /ping`、`POST /invocations`、入力検証、Runtime session ID、モデル設定、構造化された問い合わせの決定的な判定、読み取り専用分析の依存注入をローカルで検証します。入力契約は [`business-analysis.md`](business-analysis.md) を参照してください。
+このテストはAWSへ接続しません。RuntimeのHTTP契約と分析に加え、5ツール、fake S3/DynamoDB adapter、未承認拒否、承認後改変拒否、冪等性も検証します。入力契約は [`business-analysis.md`](business-analysis.md) を参照してください。
 
 ## コンテナのローカル検証
 
@@ -438,7 +460,9 @@ Runtime Stackは `agentImageDigest` がない場合にはCDKアプリへ追加�
   -AWS_REGION ap-northeast-1 `
   -ModelId jp.amazon.nova-2-lite-v1:0 `
   -ConfigPath .\config\cdk-outputs.json `
-  -StackName BizFlowAgentRuntimeStack
+  -StackName BizFlowAgentRuntimeStack `
+  -EnableReadTools `
+  -ToolsConfigPath .\config\tools-outputs.json
 ```
 
 dry-runでも接続先、ECR設定、同一Git SHAタグの有無を確定するため、読み取り専用の `sts get-caller-identity`、`ecr describe-repositories`、`ecr batch-get-image` は実行します。それ以外のbuild、ECRログイン、push、Runtime更新、Endpoint更新は実行しません。
@@ -456,6 +480,7 @@ dry-runでも接続先、ECR設定、同一Git SHAタグの有無を確定する
 - 同じGitコミットSHAのタグが不変ECRリポジトリに既に存在する（`-Execute`時）
 - 必須のCDK Outputがない
 - `networkConfiguration` が不正
+- `-EnableReadTools`指定時にTools Outputsまたはリージョン一致するGateway URLがない
 
 Git worktreeをcleanにするのは、SHAタグと実際のコンテナ内容を必ず一致させるためです。イメージタグには完全な40文字のGitコミットSHAを使用し、`latest` は使用しません。
 
@@ -472,6 +497,8 @@ dry-runの内容を確認した後、`-Execute` を付けます。
   -ModelId jp.amazon.nova-2-lite-v1:0 `
   -ConfigPath .\config\cdk-outputs.json `
   -StackName BizFlowAgentRuntimeStack `
+  -EnableReadTools `
+  -ToolsConfigPath .\config\tools-outputs.json `
   -Execute
 ```
 
@@ -485,7 +512,7 @@ dry-runの内容を確認した後、`-Execute` を付けます。
 6. ECRからpush済みイメージのdigestを取得する。
 7. 現在のEndpoint `liveVersion` をロールバック用に保存する。
 8. `repository@sha256:...` を `containerConfiguration.containerUri` に指定する。
-9. `BIZFLOW_MODEL_PROVIDER=bedrock`、`BIZFLOW_MODEL_ID`、`BIZFLOW_AWS_REGION` をRuntime環境変数へ設定する。
+9. `BIZFLOW_MODEL_PROVIDER=bedrock`、`BIZFLOW_MODEL_ID`、`BIZFLOW_AWS_REGION`をRuntime環境変数へ設定し、`-EnableReadTools`指定時だけOutputs由来の`BIZFLOW_GATEWAY_URL`を追加する。
 10. CDK Outputs由来のrole/network設定と `metadataConfiguration.requireMMDSV2=true` で `UpdateAgentRuntime` を実行する。
 11. 新Runtimeバージョンを期限付きでポーリングする。
 12. `READY` 後、新バージョン番号の手入力を要求する。
@@ -494,7 +521,7 @@ dry-runの内容を確認した後、`-Execute` を付けます。
 15. `InvokeAgentRuntime` によるスモークテストを行う。
 16. デプロイ記録とロールバックコマンドを表示する。
 
-公開スクリプトはRuntimeの環境変数マップを上記3項目で管理します。将来、MemoryやGatewayなどの追加設定を環境変数で渡す場合は、その変数を公開スクリプトの `environmentVariables` に追加してから更新します。
+公開スクリプトはRuntimeの環境変数マップをモデル用3項目と、明示的に有効化したGateway URLで管理します。Gateway URLは`config/tools-outputs.json`から読み込み、ソースやデプロイコマンドへ直接埋め込みません。`-EnableReadTools`を省略した更新ではGateway環境変数を設定せず、入力ベースの従来動作を維持します。
 
 `-Execute` を指定していても、Endpoint切り替え確認で別の値または空文字を入力すると、新Runtimeバージョンの作成までで停止します。`DEFAULT`はAgentCoreにより新Versionへ自動更新されますが、本番用`PROD`は旧Versionのまま維持されます。
 

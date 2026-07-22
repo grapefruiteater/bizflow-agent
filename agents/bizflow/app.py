@@ -25,7 +25,7 @@ logging.basicConfig(
 
 app = FastAPI(
     title="BizFlow Agent Runtime",
-    version="0.3.0",
+    version="0.4.0",
     docs_url=None,
     redoc_url=None,
 )

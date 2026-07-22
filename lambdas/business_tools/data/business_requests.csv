@@ -1,0 +1,9 @@
+request_id,received_at,category,customer,description,urgency,status,due_date
+REQ-001,2026-07-10,契約,ABC商事,契約内容を確認したい,medium,open,2026-07-18
+REQ-002,2026-07-11,障害,XYZ株式会社,サービスにログインできない,high,open,2026-07-12
+REQ-003,2026-07-12,請求,DEF合同会社,請求金額が異なる,high,open,2026-07-14
+REQ-004,2026-07-12,総務,GHI株式会社,入館証の再発行を依頼したい,low,closed,2026-07-16
+REQ-005,2026-07-13,障害,JKL商事,連携APIでエラーが発生する,high,in_progress,2026-07-13
+REQ-006,2026-07-13,契約,MNO株式会社,NDAの確認を依頼したい,medium,open,2026-07-20
+REQ-007,2026-07-09,注文,PQRストア,配送先を変更したい,medium,closed,2026-07-11
+REQ-008,2026-07-13,申請,社内利用者A,業務アカウントを発行してほしい,high,open,2026-07-13

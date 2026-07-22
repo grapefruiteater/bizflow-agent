@@ -7,7 +7,7 @@
         <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=28;fontStyle=1;fontColor=#232F3E;" value="BizFlow Agent｜業務分析・提案・実行AIエージェント" vertex="1">
           <mxGeometry height="44" width="1400" x="40" y="20" as="geometry" />
         </mxCell>
-        <mxCell id="subtitle" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=14;fontColor=#545B64;" value="Amazon ECS on AWS Fargate・Amazon Cognito・Amazon Bedrock AgentCore・Human-in-the-loop" vertex="1">
+        <mxCell id="subtitle" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=14;fontColor=#545B64;" value="目標構成（段階実装）｜Amazon ECS on AWS Fargate・Amazon Cognito・Amazon Bedrock AgentCore・Human-in-the-loop" vertex="1">
           <mxGeometry height="28" width="1300" x="42" y="62" as="geometry" />
         </mxCell>
         <mxCell id="awsCloud" parent="1" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=14;spacingTop=8;fillColor=#FFFFFF;strokeColor=#232F3E;strokeWidth=2;fontStyle=1;fontSize=16;fontColor=#232F3E;" value="AWS Cloud" vertex="1">

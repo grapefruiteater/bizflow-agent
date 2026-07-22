@@ -1,0 +1,141 @@
+[
+  {
+    "name": "get_business_requests",
+    "description": "指定期間の架空の問い合わせ・業務依頼を取得します。読み取り専用です。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "start_date": {
+          "type": "string",
+          "description": "取得開始日。YYYY-MM-DD形式。"
+        },
+        "end_date": {
+          "type": "string",
+          "description": "取得終了日。YYYY-MM-DD形式。"
+        },
+        "category": {
+          "type": "string",
+          "description": "任意のカテゴリー完全一致フィルター。"
+        },
+        "urgency": {
+          "type": "string",
+          "description": "任意の緊急度完全一致フィルター。low、medium、high。"
+        },
+        "status": {
+          "type": "string",
+          "description": "任意の状態完全一致フィルター。open、in_progress、waiting、closed。"
+        }
+      },
+      "required": ["start_date", "end_date"]
+    }
+  },
+  {
+    "name": "analyze_request_data",
+    "description": "取得済み問い合わせの件数、カテゴリー、緊急度、状態、期限超過を決定的に集計します。読み取り専用です。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "as_of": {
+          "type": "string",
+          "description": "分析基準日。YYYY-MM-DD形式。"
+        },
+        "requests": {
+          "type": "array",
+          "description": "get_business_requestsが返した問い合わせ配列。",
+          "items": {
+            "type": "object",
+            "properties": {
+              "request_id": {"type": "string"},
+              "received_at": {"type": "string"},
+              "category": {"type": "string"},
+              "customer": {"type": "string"},
+              "description": {"type": "string"},
+              "urgency": {"type": "string"},
+              "status": {"type": "string"},
+              "due_date": {"type": "string"}
+            },
+            "required": [
+              "request_id",
+              "received_at",
+              "category",
+              "customer",
+              "description",
+              "urgency",
+              "status",
+              "due_date"
+            ]
+          }
+        }
+      },
+      "required": ["as_of", "requests"]
+    }
+  },
+  {
+    "name": "search_company_rules",
+    "description": "架空の社内問い合わせ対応ルールから、依頼内容に関連する規則を検索します。読み取り専用です。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "検索したい規則や対応内容。"
+        },
+        "category": {
+          "type": "string",
+          "description": "任意の問い合わせカテゴリー。"
+        }
+      },
+      "required": ["query"]
+    }
+  },
+  {
+    "name": "create_business_task",
+    "description": "承認済みの提案と完全一致する場合だけ担当タスクを登録します。承認状態はバックエンドで再確認されます。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "approval_id": {
+          "type": "string",
+          "description": "Web/BFFが発行し承認した承認ID。"
+        },
+        "request_id": {
+          "type": "string",
+          "description": "対象問い合わせID。"
+        },
+        "assignee": {
+          "type": "string",
+          "description": "承認された担当者。"
+        },
+        "due_date": {
+          "type": "string",
+          "description": "承認された期限。YYYY-MM-DD形式。"
+        },
+        "action": {
+          "type": "string",
+          "description": "承認された対応内容。"
+        }
+      },
+      "required": [
+        "approval_id",
+        "request_id",
+        "assignee",
+        "due_date",
+        "action"
+      ]
+    }
+  },
+  {
+    "name": "get_task_status",
+    "description": "登録済みタスクの現在状態と承認情報を取得します。読み取り専用です。",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "task_id": {
+          "type": "string",
+          "description": "create_business_taskが返したタスクID。"
+        }
+      },
+      "required": ["task_id"]
+    }
+  }
+]

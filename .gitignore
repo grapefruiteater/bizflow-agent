@@ -14,4 +14,5 @@ coverage/
 cdk-outputs.json
 config/cdk-outputs.json
 config/foundation-outputs.json
+config/tools-outputs.json
 deployments/agentcore/*.json

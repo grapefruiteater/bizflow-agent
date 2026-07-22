@@ -1,0 +1,11 @@
+{
+  "BizFlowAgentToolsStack": {
+    "BusinessDataBucketName": "example-bizflow-business-data-bucket",
+    "WorkflowTableName": "bizflow-workflow-dev",
+    "BusinessToolsGatewayId": "bizflow-tools-dev-example",
+    "BusinessToolsGatewayArn": "arn:aws:bedrock-agentcore:ap-northeast-1:111122223333:gateway/bizflow-tools-dev-example",
+    "BusinessToolsGatewayUrl": "https://bizflow-tools-dev-example.gateway.bedrock-agentcore.ap-northeast-1.amazonaws.com/mcp",
+    "ReadToolsFunctionName": "bizflow-read-tools-dev",
+    "WriteToolsFunctionName": "bizflow-write-tools-dev"
+  }
+}

@@ -17,6 +17,10 @@ param(
 
     [string]$StackName,
 
+    [switch]$EnableReadTools,
+
+    [string]$ToolsConfigPath,
+
     [switch]$Execute,
 
     [ValidateRange(60, 3600)]
@@ -237,6 +241,38 @@ function Read-DeploymentConfiguration {
     }
 }
 
+function Read-ToolsGatewayUrl {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "Tools Outputs file was not found: $Path"
+    }
+    try {
+        $root = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+    }
+    catch {
+        throw "Tools Outputs file is not valid JSON: $Path"
+    }
+
+    $directProperty = $root.PSObject.Properties["BusinessToolsGatewayUrl"]
+    if ($null -ne $directProperty -and $directProperty.Value) {
+        return [string]$directProperty.Value
+    }
+    $candidates = @(
+        $root.PSObject.Properties |
+            ForEach-Object {
+                $gatewayProperty = $_.Value.PSObject.Properties["BusinessToolsGatewayUrl"]
+                if ($null -ne $gatewayProperty -and $gatewayProperty.Value) {
+                    [string]$gatewayProperty.Value
+                }
+            }
+    )
+    if ($candidates.Count -ne 1) {
+        throw "Could not find one BusinessToolsGatewayUrl in the Tools Outputs file."
+    }
+    return $candidates[0]
+}
+
 function Get-EcrDetails {
     param([Parameter(Mandatory = $true)][string]$RepositoryUri)
 
@@ -360,6 +396,23 @@ elseif (-not [IO.Path]::IsPathRooted($DeploymentRecordDirectory)) {
     $DeploymentRecordDirectory = Join-Path $repoRoot $DeploymentRecordDirectory
 }
 
+$gatewayUrl = $null
+if ($EnableReadTools) {
+    if (-not $ToolsConfigPath) {
+        $ToolsConfigPath = Join-Path $repoRoot "config\tools-outputs.json"
+    }
+    elseif (-not [IO.Path]::IsPathRooted($ToolsConfigPath)) {
+        $ToolsConfigPath = Join-Path $repoRoot $ToolsConfigPath
+    }
+    $gatewayUrl = Read-ToolsGatewayUrl -Path $ToolsConfigPath
+    $escapedRegion = [regex]::Escape($AWS_REGION)
+    $gatewayPattern = "^https://[a-zA-Z0-9-]+\.gateway\.bedrock-agentcore\.${escapedRegion}\.amazonaws\.com(?:\.cn)?/mcp/?$"
+    if ($gatewayUrl -notmatch $gatewayPattern) {
+        throw "BusinessToolsGatewayUrl must be the regional HTTPS AgentCore Gateway /mcp endpoint for $AWS_REGION."
+    }
+    $gatewayUrl = $gatewayUrl.TrimEnd('/')
+}
+
 Assert-CommandExists -Name "aws"
 Assert-CommandExists -Name "git"
 Assert-CommandExists -Name "docker"
@@ -461,6 +514,11 @@ Write-Host "  Endpoint:         $($configuration.EndpointName)"
 Write-Host "  Bedrock model:    $ModelId"
 Write-Host "  Network mode:     $($configuration.NetworkConfiguration.networkMode)"
 Write-Host "  Config:           $ConfigPath"
+Write-Host "  Read tools:       $([bool]$EnableReadTools)"
+if ($gatewayUrl) {
+    Write-Host "  Gateway:          $gatewayUrl"
+    Write-Host "  Tools config:     $ToolsConfigPath"
+}
 if ($existingImageDigest) {
     Write-Host "  Existing digest:  $existingImageDigest" -ForegroundColor Yellow
 }
@@ -509,6 +567,8 @@ $record = [pscustomobject]@{
     agentRuntimeId = $configuration.AgentRuntimeId
     agentRuntimeArn = $configuration.AgentRuntimeArn
     modelId = $ModelId
+    readToolsEnabled = [bool]$EnableReadTools
+    gatewayUrl = $gatewayUrl
     runtimeVersion = $null
     endpointName = $configuration.EndpointName
     metadataConfiguration = [ordered]@{
@@ -574,6 +634,14 @@ try {
     $record.rollbackCommand = $rollbackCommand
 
     $clientToken = "bizflow-$gitCommit"
+    $runtimeEnvironmentVariables = [ordered]@{
+        BIZFLOW_MODEL_ID = $ModelId
+        BIZFLOW_AWS_REGION = $AWS_REGION
+        BIZFLOW_MODEL_PROVIDER = "bedrock"
+    }
+    if ($gatewayUrl) {
+        $runtimeEnvironmentVariables["BIZFLOW_GATEWAY_URL"] = $gatewayUrl
+    }
     $updateRequest = [ordered]@{
         agentRuntimeId = $configuration.AgentRuntimeId
         agentRuntimeArtifact = @{
@@ -583,11 +651,7 @@ try {
         }
         roleArn = $configuration.RoleArn
         networkConfiguration = $configuration.NetworkConfiguration
-        environmentVariables = @{
-            BIZFLOW_MODEL_ID = $ModelId
-            BIZFLOW_AWS_REGION = $AWS_REGION
-            BIZFLOW_MODEL_PROVIDER = "bedrock"
-        }
+        environmentVariables = $runtimeEnvironmentVariables
         metadataConfiguration = @{
             requireMMDSV2 = $true
         }

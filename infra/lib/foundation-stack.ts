@@ -1,4 +1,5 @@
 import {
+  ArnFormat,
   CfnOutput,
   RemovalPolicy,
   Stack,
@@ -59,24 +60,39 @@ export class BizFlowAgentFoundationStack extends Stack {
       service: "logs",
       resource: "log-group",
       resourceName: "/aws/bedrock-agentcore/runtimes/*",
+      arnFormat: ArnFormat.COLON_RESOURCE_NAME,
+    });
+    const allLogGroupsArn = this.formatArn({
+      service: "logs",
+      resource: "log-group",
+      resourceName: "*",
+      arnFormat: ArnFormat.COLON_RESOURCE_NAME,
     });
     this.runtimeExecutionRole.addToPolicy(
       new iam.PolicyStatement({
-        sid: "RuntimeLogging",
+        sid: "ManageRuntimeLogGroups",
         actions: [
           "logs:CreateLogGroup",
-          "logs:CreateLogStream",
           "logs:DescribeLogStreams",
+        ],
+        resources: [runtimeLogGroupArn],
+      }),
+    );
+    this.runtimeExecutionRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: "WriteRuntimeLogStreams",
+        actions: [
+          "logs:CreateLogStream",
           "logs:PutLogEvents",
         ],
-        resources: [runtimeLogGroupArn, `${runtimeLogGroupArn}:*`],
+        resources: [`${runtimeLogGroupArn}:log-stream:*`],
       }),
     );
     this.runtimeExecutionRole.addToPolicy(
       new iam.PolicyStatement({
         sid: "DescribeRuntimeLogGroups",
         actions: ["logs:DescribeLogGroups"],
-        resources: ["*"],
+        resources: [allLogGroupsArn],
       }),
     );
 

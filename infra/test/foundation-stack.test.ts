@@ -72,6 +72,42 @@ describe("BizFlowAgentFoundationStack", () => {
     expect(synthesizedTemplate).toContain("ap-northeast-3");
   });
 
+  test("uses valid least-privilege CloudWatch Logs ARNs for the runtime", () => {
+    template.hasResourceProperties("AWS::IAM::Policy", {
+      PolicyDocument: {
+        Statement: Match.arrayWith([
+          Match.objectLike({
+            Action: Match.arrayWith([
+              "logs:CreateLogGroup",
+              "logs:DescribeLogStreams",
+            ]),
+            Sid: "ManageRuntimeLogGroups",
+          }),
+          Match.objectLike({
+            Action: Match.arrayWith([
+              "logs:CreateLogStream",
+              "logs:PutLogEvents",
+            ]),
+            Sid: "WriteRuntimeLogStreams",
+          }),
+          Match.objectLike({
+            Action: "logs:DescribeLogGroups",
+            Sid: "DescribeRuntimeLogGroups",
+          }),
+        ]),
+      },
+    });
+
+    const synthesizedTemplate = JSON.stringify(template.toJSON());
+    expect(synthesizedTemplate).toContain(
+      "log-group:/aws/bedrock-agentcore/runtimes/*",
+    );
+    expect(synthesizedTemplate).toContain(":log-stream:*");
+    expect(synthesizedTemplate).not.toContain(
+      "log-group//aws/bedrock-agentcore/runtimes",
+    );
+  });
+
   test("exports values needed by the initial runtime deployment", () => {
     template.hasOutput("EcrRepositoryUri", {});
     template.hasOutput("AgentRuntimeExecutionRoleArn", {});

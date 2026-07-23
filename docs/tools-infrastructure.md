@@ -6,7 +6,7 @@
 
 S3、DynamoDB、読み取り／書き込みLambda、Gatewayは2026-07-22にAWSへdeploy済みで、環境別OutputsはGit管理対象外の`config/tools-outputs.json`へ保存されています。AgentCore Runtime Version 6にはGateway URLが設定され、`PROD` Endpointから4つの読み取りツールを利用できます。Gateway直接スモークテスト、Runtimeスモークテスト、CloudWatch Logsへの出力を確認済みです。
 
-将来のBFFだけが呼び出す承認バックエンドLambdaもAWSへdeploy済みです。Outputsは9つとなり、`ApprovalWorkflowFunctionName`と`ApprovalWorkflowFunctionArn`が追加されています。承認要求・承認・DynamoDB監査履歴の実環境テストも完了しています。
+Web BFFだけが呼び出す承認バックエンドLambdaもAWSへdeploy済みです。Outputsは9つとなり、`ApprovalWorkflowFunctionName`と`ApprovalWorkflowFunctionArn`が追加されています。承認要求・承認・DynamoDB監査履歴の実環境テストも完了しています。Next.js BFFとWeb Service StackはこのOutputsを設定ファイルから読み取る実装まで完了しています。Web FoundationはAWSへdeploy済みで、Web Serviceは未deployです。
 
 CDKアプリでは`enableTools`の既定値を`false`にしています。次を明示した場合だけTools Stackをsynth対象に追加します。
 

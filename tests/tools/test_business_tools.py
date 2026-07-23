@@ -41,6 +41,17 @@ def invoke(tool_name: str, arguments: dict) -> dict:
     return lambda_function.lambda_handler(arguments, gateway_context(tool_name))
 
 
+def invoke_from_bff(tool_name: str, arguments: dict) -> dict:
+    return lambda_function.lambda_handler(
+        {
+            "source": "bizflow-web-bff",
+            "operation": tool_name,
+            "arguments": arguments,
+        },
+        SimpleNamespace(),
+    )
+
+
 def test_tool_schema_defines_the_five_portfolio_tools() -> None:
     schema_path = (
         Path(__file__).parents[2]
@@ -207,6 +218,34 @@ def test_lambda_returns_safe_error_for_missing_gateway_context(
     service: BusinessToolsService,
 ) -> None:
     result = lambda_function.lambda_handler({}, SimpleNamespace())
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "INVALID_CONTEXT"
+
+
+def test_trusted_bff_envelope_uses_the_same_read_tool_contract(
+    service: BusinessToolsService,
+) -> None:
+    result = invoke_from_bff(
+        "get_business_requests",
+        {"start_date": "2026-07-10", "end_date": "2026-07-13"},
+    )
+
+    assert result["ok"] is True
+    assert result["tool"] == "get_business_requests"
+    assert result["data"]["count"] == 7
+
+
+def test_direct_invocation_without_the_bff_source_is_rejected(
+    service: BusinessToolsService,
+) -> None:
+    result = lambda_function.lambda_handler(
+        {
+            "operation": "get_business_requests",
+            "arguments": {"start_date": "2026-07-10", "end_date": "2026-07-13"},
+        },
+        SimpleNamespace(),
+    )
 
     assert result["ok"] is False
     assert result["error"]["code"] == "INVALID_CONTEXT"

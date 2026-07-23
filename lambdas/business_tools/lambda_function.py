@@ -8,7 +8,7 @@ from collections.abc import Callable, Mapping
 from typing import Any
 
 from .aws_adapters import build_service_from_environment
-from .service import BusinessToolError, BusinessToolsService
+from .service import BusinessToolError, BusinessToolsService, require_text
 
 
 LOGGER = logging.getLogger("bizflow.business_tools")
@@ -17,14 +17,14 @@ LOGGER.setLevel(logging.INFO)
 SERVICE = build_service_from_environment()
 TOOL_DELIMITER = "___"
 ALLOWED_TOOLS_ENV = "BIZFLOW_ALLOWED_TOOLS"
+BFF_SOURCE = "bizflow-web-bff"
 
 
 def lambda_handler(event: Any, context: Any) -> dict[str, Any]:
     """Dispatch a Gateway Lambda target invocation to one of five tools."""
 
     try:
-        arguments = require_arguments(event)
-        tool_name = get_gateway_tool_name(context)
+        tool_name, arguments = resolve_invocation(event, context)
         if tool_name not in get_allowed_tools():
             raise BusinessToolError(
                 "TOOL_NOT_ALLOWED",
@@ -77,6 +77,34 @@ def require_arguments(event: Any) -> Mapping[str, Any]:
     if not isinstance(event, Mapping):
         raise BusinessToolError("INVALID_EVENT", "The Lambda event must be an object.")
     return event
+
+
+def resolve_invocation(
+    event: Any,
+    context: Any,
+) -> tuple[str, Mapping[str, Any]]:
+    """Resolve either an AgentCore Gateway call or a trusted BFF invocation.
+
+    The direct envelope is not an authentication mechanism. Lambda IAM remains
+    the caller boundary; only the ECS task role receives direct invoke access.
+    Gateway calls always use their signed client context and cannot override
+    the selected tool through event fields.
+    """
+
+    client_context = getattr(context, "client_context", None)
+    custom = getattr(client_context, "custom", None)
+    if isinstance(custom, Mapping):
+        return get_gateway_tool_name(context), require_arguments(event)
+
+    request = require_arguments(event)
+    if request.get("source") != BFF_SOURCE:
+        raise BusinessToolError(
+            "INVALID_CONTEXT",
+            "AgentCore Gateway context or the trusted BFF envelope is required.",
+        )
+    operation = require_text(request.get("operation"), "operation", 64)
+    arguments = require_arguments(request.get("arguments"))
+    return operation, arguments
 
 
 def get_gateway_tool_name(context: Any) -> str:

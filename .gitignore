@@ -9,6 +9,7 @@ __pycache__/
 !.env.example
 cdk.out/
 node_modules/
+web/.next/
 coverage/
 *.tsbuildinfo
 cdk-outputs.json
@@ -16,4 +17,7 @@ config/cdk-outputs.json
 config/foundation-outputs.json
 config/tools-outputs.json
 config/memory-outputs.json
+config/web-foundation-outputs.json
+config/web-service-outputs.json
 deployments/agentcore/*.json
+deployments/web/*.json

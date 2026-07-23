@@ -22,7 +22,9 @@ AWS基盤は、以前のアプリやCDKスタックで作成したリソース�
 | 承認バックエンドLambda | AWSへdeploy・動作確認済み |
 | Code Interpreter | Runtime Version 6でも自動スモークテスト成功 |
 | AgentCore Memory | Runtime Version 6へ接続し、2ターンの保存・再取得を検証済み |
-| Next.js・Cognito・ECS | 未実装。最後の工程で追加する |
+| Next.js Web/BFF | ダッシュボード、Agentチャット、承認カード、タスク登録、履歴画面をローカル実装・検証済み |
+| Web Foundation | 2026-07-23にECR、VPC、Cognito、ALB、Route 53、WAF、ECS ClusterをAWSへdeploy・確認済み |
+| Web Service / ECS Fargate | CDKソース、テスト、`--no-lookups` synthまで完了。AWSへは未deploy |
 
 現在の利用者向け動作は読み取り専用です。モデルは`get_business_requests`、`analyze_request_data`、`search_company_rules`、`get_task_status`を選択できますが、`create_business_task`はMCP allow-listとRuntime側の再フィルタの両方で除外しています。承認されていない書き込みをモデルの判断だけで実行することはありません。
 
@@ -42,7 +44,7 @@ Runtime環境変数`BIZFLOW_GATEWAY_URL`は`config/tools-outputs.json`から公�
 
 架空の問い合わせCSV、社内ルール、AgentCore Gateway Lambda target互換の5ツール、S3/DynamoDB adapter、読み取り・書き込みLambdaを分離した`BizFlowAgentToolsStack`は2026-07-22にAWSへdeploy済みです。Gateway直接スモークテストと、読み取りツールを有効化したRuntime Version 6のリモートスモークテストも完了しています。
 
-将来のWeb/BFFだけが呼び出す承認バックエンドLambdaもAWSへdeploy済みです。承認要求、状態確認、承認、DynamoDB監査履歴が正常に機能することを確認しました。このLambdaはAgentCore Gateway targetには登録せず、モデルから到達できない境界を維持しています。詳細は [`docs/approval-workflow.md`](docs/approval-workflow.md) を参照してください。
+Web/BFFだけが呼び出す承認バックエンドLambdaもAWSへdeploy済みです。承認要求、状態確認、承認、DynamoDB監査履歴が正常に機能することを確認しました。このLambdaはAgentCore Gateway targetには登録せず、モデルから到達できない境界を維持しています。Next.js BFFはこの承認を取得してから承認内容をWrite Lambdaへ渡すため、モデル自身へ書き込みツールを公開しません。Web実装は [`docs/web-application.md`](docs/web-application.md)、承認契約は [`docs/approval-workflow.md`](docs/approval-workflow.md) を参照してください。
 
 AWS管理の`aws.codeinterpreter.v1`を使うCode Interpreter分析ツールはRuntime Version 6でも有効です。Version 5で1から100までの整数の二乗和`338350`とCloudWatch Logsの完了ログを確認し、Version 6への更新時にも自動スモークテストが成功しました。既存の`analyze_request_data`は決定的なフォールバックとして残しています。詳細は [`docs/code-interpreter.md`](docs/code-interpreter.md) を参照してください。
 
@@ -167,6 +169,8 @@ bizflow-agent/
 | `config/agentcore.example.json` | BizFlow専用CDK Outputsまたは環境別設定ファイルの形式例です。値は例示用であり、そのまま使用しません。 |
 | `config/memory-outputs.example.json` | Memory Stack Outputsの形式例です。実環境の`memory-outputs.json`はGit管理しません。 |
 | `config/tools-outputs.example.json` | Tools Stack Outputsの形式例です。実環境の`tools-outputs.json`はGit管理しません。 |
+| `config/web-foundation-outputs.example.json` | Web Foundation Stack Outputsの形式例です。実環境のOutputsはGit管理しません。 |
+| `config/web-service-outputs.example.json` | Web Service Stack Outputsの形式例です。イメージdigestとService情報を記録します。 |
 | `config/cdk-outputs.json` | BizFlow専用スタックのdeploy後に生成する環境固有ファイルです。Git管理せず、公開スクリプトの入力として使用します。 |
 | `scripts/publish-agentcore.ps1` | Git SHAタグによるARM64イメージ公開とAgentCore Runtime更新を行います。デフォルトはdry-runで、`-Execute` 指定時のみbuild/pushとRuntime更新へ進みます。 |
 | `scripts/smoke-test-agentcore.ps1` | ローカルコンテナまたはAgentCore上の`PROD` Endpointを検証します。リモートではEndpoint状態・liveVersion・実呼び出しを確認します。 |
@@ -176,6 +180,7 @@ bizflow-agent/
 | `docs/approval-workflow.md` | モデルから分離した承認バックエンドLambdaの操作契約、IAM境界、現在の反映状態を説明します。 |
 | `docs/code-interpreter.md` | 管理済みCode Interpreterのセッション、IAM、Runtime接続、フォールバック、反映順序を説明します。 |
 | `docs/memory.md` | session単位の短期Memory、IAM、保持期間、Runtime応答、反映順序と2ターンスモークテストを説明します。 |
+| `docs/web-application.md` | Next.js画面、BFF API、Cognito/ALB認証、ECS/Fargate構成、承認境界、ローカル検証、AWS反映順序を説明します。 |
 | `docs/portfolio-mvp.md` | ポートフォリオのシナリオ、現在の実装状態、5ツール、承認境界、今後のAWS実装順序を説明します。 |
 | `docs/tools-infrastructure.md` | S3、DynamoDB、読み取り／書き込みLambda、AgentCore GatewayのCDK設計、IAM境界、Outputs、直接スモークテストとRuntime接続を説明します。 |
 | `docs/deployment.md` | Windowsネイティブ環境の準備、CDK Outputs契約、dry-run、公開、ヘルスチェック、デプロイ記録、ロールバックの詳細手順です。 |
@@ -196,21 +201,37 @@ bizflow-agent/
 | ファイル | 説明 |
 |---|---|
 | `lambdas/approval_workflow/__init__.py` | BFF向け承認Lambdaパッケージの初期化ファイルです。 |
-| `lambdas/approval_workflow/lambda_function.py` | `request_approval`、`approve`、`reject`、`get_approval`を処理します。Gateway targetには登録せず、将来のBFFからの信頼されたLambda呼び出しだけを想定します。 |
+| `lambdas/approval_workflow/lambda_function.py` | `request_approval`、`approve`、`reject`、`get_approval`を処理します。Gateway targetには登録せず、Next.js BFFのTask RoleからのLambda呼び出しだけを想定します。 |
+
+### Web / BFF
+
+| ファイル | 説明 |
+|---|---|
+| `web/src/app/page.tsx` / `components/workspace.tsx` | 問い合わせダッシュボード、Agentチャット、推奨アクション、承認・却下、承認後タスク登録を表示します。 |
+| `web/src/app/history/page.tsx` / `components/history-view.tsx` | 承認IDから承認内容、承認者、作成タスク、監査イベントを確認する履歴画面です。 |
+| `web/src/app/api/` | dashboard、AgentCore Runtime、承認、タスク登録、履歴、ヘルスチェックのBFF API Routesです。 |
+| `web/src/lib/auth.ts` | ALB/Cognito identity、承認者グループ、CSRF header、actor単位Runtime session IDを検証します。 |
+| `web/src/lib/backend.ts` | AgentCore Runtimeと3つのLambdaをAWS SDKで呼び出し、承認済み提案だけを書き込み経路へ渡します。 |
+| `web/src/lib/demo-backend.ts` / `demo-data.ts` | AWSへ接続せず、架空データとメモリ内承認フローを動かすローカルデモbackendです。 |
+| `web/Dockerfile` / `.dockerignore` | Next.js standalone出力を非rootユーザーで起動するFargate向けARM64対応イメージです。 |
+| `web/tests/` | 認証境界、session分離、未承認拒否、承認後登録、冪等性をVitestで検証します。 |
 
 ### CDK基盤
 
 | ファイル | 説明 |
 |---|---|
-| `infra/bin/bizflow-agent.ts` | CDKアプリのエントリーポイントです。`agentImageDigest`がある場合だけRuntime Stack、`enableTools=true`の場合だけTools Stack、`enableMemory=true`の場合だけMemory Stackを定義します。既存RuntimeロールARNはOutputsから読み、Tools・Memory StackはFoundationへ依存しません。 |
+| `infra/bin/bizflow-agent.ts` | CDKアプリのエントリーポイントです。Runtime、Tools、Memory、Web Foundation、Web Serviceを明示contextでだけ追加します。Web Serviceは各Stack Outputsを設定ファイルから読み、既存Stackとのcross-stack exportを作りません。 |
 | `infra/lib/foundation-stack.ts` | BizFlow専用ECR、AgentCore実行IAMロール、`PUBLIC`ネットワーク設定を作成します。Bedrock権限を指定profile/modelへ限定し、AWS管理Code Interpreterにはセッション利用権限だけを付与します。 |
 | `infra/lib/memory-stack.ts` | 30日保持の短期AgentCore Memoryを作成し、既存Runtimeロールへ対象Memoryの`CreateEvent`と`ListEvents`だけを付与します。 |
 | `infra/lib/runtime-stack.ts` | digest固定の初回コンテナからAgentCore Runtime、`PROD`カスタムEndpoint、Endpoint別の30日保持ロググループ、通常更新用Outputsを作成します。`DEFAULT` EndpointはRuntime作成時にAgentCoreが自動作成します。 |
 | `infra/lib/tools-stack.ts` | 合成データ用S3、承認・タスク・監査用DynamoDB、Gateway用の読み取り／書き込みLambda、BFF向け承認Lambda、IAM認証のAgentCore Gatewayと5ツールを定義します。既存RuntimeロールはOutputs由来のARNでimportします。 |
+| `infra/lib/web-foundation-stack.ts` | Web専用ECR、VPC、ECS Cluster、Cognito、HTTPS ALB、Route 53 Alias、WAFを定義します。 |
+| `infra/lib/web-service-stack.ts` | digest固定ARM64イメージのFargate Service、最小権限Task Role、Target Group、Cognito認証Listener Ruleを定義します。 |
 | `infra/test/foundation-stack.test.ts` | ECRとIAM、およびFoundation OutputsのCloudFormation定義を検証します。 |
 | `infra/test/memory-stack.test.ts` | Memoryの保持期間、RETAIN、最小権限、Outputs、長期strategyを作らないことを検証します。 |
 | `infra/test/runtime-stack.test.ts` | Runtime、Endpoint、ログ、Outputsを検証し、タグや不正なdigestを拒否することを確認します。 |
 | `infra/test/tools-stack.test.ts` | S3/DynamoDB保護、3つのLambdaの分離、最小権限、Gateway targetと5ツール、Outputsを検証します。 |
+| `infra/test/web-foundation-stack.test.ts` / `web-service-stack.test.ts` | Web基盤、認証、ネットワーク、IAM、digest固定、OutputsをCloudFormation template assertionsで検証します。 |
 | `package.json` / `package-lock.json` | Node.js/CDK依存関係を固定し、型チェックとCDKテストのコマンドを定義します。Node.js 20以上が必要です。 |
 | `cdk.json` / `tsconfig.json` / `jest.config.js` | CDKエントリーポイント、TypeScript厳格設定、Jest設定です。 |
 
@@ -338,7 +359,21 @@ python -m pip install --requirement .\agents\bizflow\requirements-dev.txt
 python -m pytest .\tests
 ```
 
-現在のローカル検証結果はPython `77 passed`、CDK/Jest `21 passed`、TypeScript型チェック成功です。
+現在のローカル検証結果はPython `79 passed`、CDK/Jest `28 passed`、Web/Vitest `7 passed`、両TypeScript型チェック成功です。Next.js本番ビルドとWeb用`linux/arm64` Docker build、ローカルコンテナのヘルスチェックも成功しています。
+
+### Web / BFF
+
+```powershell
+Set-Location .\web
+npm ci
+npm run typecheck
+npm test
+npm run build
+$env:BIZFLOW_LOCAL_DEMO = "true"
+npm run dev
+```
+
+ローカルデモはAWSへ接続しません。`http://127.0.0.1:3000`で、分析、承認要求、承認、タスク登録、履歴確認を実行できます。Web用CDKの構成、ARM64 Docker build、AWS反映前提は [`docs/web-application.md`](docs/web-application.md) を参照してください。
 
 ### ARM64コンテナ
 

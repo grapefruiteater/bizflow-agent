@@ -4,7 +4,7 @@
 
 開いている `bizflow-agent` リポジトリをそのまま使用します。スクリプトは自身の配置場所からリポジトリルートを解決するため、絶対パスをソースコードへ埋め込みません。
 
-この文書の中心は既存AgentCore Runtimeのコンテナ公開です。ポートフォリオ用のS3、DynamoDB、Lambda、AgentCore Gateway、承認バックエンド、Code Interpreter、短期Memoryは2026-07-22にAWSへdeploy・検証済みです。ECS、Cognitoは未実装です。ツール基盤は [`tools-infrastructure.md`](tools-infrastructure.md)、Code Interpreterは [`code-interpreter.md`](code-interpreter.md)、Memoryは [`memory.md`](memory.md)、全体の実装順序は [`portfolio-mvp.md`](portfolio-mvp.md) を参照してください。
+この文書の中心は既存AgentCore Runtimeのコンテナ公開です。ポートフォリオ用のS3、DynamoDB、Lambda、AgentCore Gateway、承認バックエンド、Code Interpreter、短期Memoryは2026-07-22にAWSへdeploy・検証済みです。2026-07-23にWeb Foundationもdeploy済みです。Next.js Web/BFFとWeb ServiceのCDKはローカル実装・検証済みですが、Fargate Serviceは未deployです。ツール基盤は [`tools-infrastructure.md`](tools-infrastructure.md)、Code Interpreterは [`code-interpreter.md`](code-interpreter.md)、Memoryは [`memory.md`](memory.md)、Webは [`web-application.md`](web-application.md)、全体の実装順序は [`portfolio-mvp.md`](portfolio-mvp.md) を参照してください。
 
 開発・デプロイ環境は次の構成です。
 
@@ -24,13 +24,13 @@
 
 ### 現在の状態
 
-CDKソースは `infra` に実装済みです。Foundation、Runtime、サービス管理`DEFAULT`、明示昇格用`PROD` Endpoint、Tools Stackのデプロイは完了しています。`PROD`へのモデル応答もユーザーがAWSコンソールとスモークテストで確認済みです。採用モデルは `jp.amazon.nova-2-lite-v1:0` です。
+CDKソースは `infra` に実装済みです。AgentCore Foundation、Runtime、サービス管理`DEFAULT`、明示昇格用`PROD` Endpoint、Tools、Memory、Web Foundationのデプロイは完了しています。`PROD`へのモデル応答もユーザーがAWSコンソールとスモークテストで確認済みです。採用モデルは `jp.amazon.nova-2-lite-v1:0` です。Web ServiceのCDKソースはローカル検証済みで、AWSへはまだdeployしていません。
 
 `config/cdk-outputs.json` はBizFlow専用スタックの実環境Outputsです。環境固有情報を含むためGit管理せず、Runtime Stackをdeployしたときだけ更新します。形式例は `config/agentcore.example.json` に保持します。
 
 ### スタック分割
 
-初期RuntimeはECR上のコンテナイメージを必要とします。空のECR作成とRuntime作成を一度に行わず、FoundationとRuntimeを分けます。業務ツール基盤と短期Memoryは既存Runtimeの通常更新から独立したStackです。
+初期RuntimeはECR上のコンテナイメージを必要とします。空のECR作成とRuntime作成を一度に行わず、FoundationとRuntimeを分けます。業務ツール基盤、短期Memory、Web Foundation、Web Serviceは既存Runtimeの通常更新から独立したStackです。
 
 #### `BizFlowAgentFoundationStack`
 
@@ -76,6 +76,12 @@ CDKソースは `infra` に実装済みです。Foundation、Runtime、サービ
 - Runtime公開用のMemory IDとARN Outputs
 
 `enableMemory=true`の場合だけCDKアプリへ追加されます。既存RuntimeロールをOutputs由来のARNでimportし、FoundationやTools Stackへのcross-stack参照を作りません。長期Memory strategyはCognito導入後まで作成しません。詳細は [`memory.md`](memory.md) を参照してください。
+
+#### `BizFlowWebFoundationStack` / `BizFlowWebServiceStack`（明示指定時のみ）
+
+Web FoundationはWeb専用ECR、2 AZのVPC、ECS Cluster、Cognito、HTTPS ALB、Route 53 Alias、WAFを作成します。Web Serviceはpush済み`linux/arm64`イメージのdigest、Web Foundation Outputs、Runtime Outputs、Tools Outputsを読み、private subnetのFargate ServiceとCognito認証Listener Ruleを追加します。
+
+両Stackは既存AgentCore Foundation/Runtime/Tools/Memory StackとCloudFormationのcross-stack exportを作らず、設定ファイルの値を再利用します。ローカル実装・テスト・synthは完了し、Web FoundationはAWSへdeploy済みです。Web Serviceは未deployです。前提、費用、差分確認と段階的な反映順序は [`web-application.md`](web-application.md) を参照してください。
 
 ### 初期構築の実行順序
 

@@ -1,0 +1,22 @@
+{
+  "BizFlowWebFoundationStack": {
+    "WebRepositoryName": "bizflow-web-dev",
+    "WebRepositoryArn": "arn:aws:ecr:ap-northeast-1:111122223333:repository/bizflow-web-dev",
+    "WebRepositoryUri": "111122223333.dkr.ecr.ap-northeast-1.amazonaws.com/bizflow-web-dev",
+    "WebVpcId": "vpc-0123456789abcdef0",
+    "WebAvailabilityZones": "ap-northeast-1a,ap-northeast-1c",
+    "WebPrivateSubnetIds": "subnet-0123456789abcdef0,subnet-0fedcba9876543210",
+    "WebPrivateSubnetRouteTableIds": "rtb-0123456789abcdef0,rtb-0fedcba9876543210",
+    "WebClusterName": "bizflow-web-dev",
+    "WebClusterArn": "arn:aws:ecs:ap-northeast-1:111122223333:cluster/bizflow-web-dev",
+    "WebAlbArn": "arn:aws:elasticloadbalancing:ap-northeast-1:111122223333:loadbalancer/app/bizflow-web-dev/0123456789abcdef",
+    "WebAlbDnsName": "bizflow-web-dev-123456789.ap-northeast-1.elb.amazonaws.com",
+    "WebAlbSecurityGroupId": "sg-0123456789abcdef0",
+    "WebHttpsListenerArn": "arn:aws:elasticloadbalancing:ap-northeast-1:111122223333:listener/app/bizflow-web-dev/0123456789abcdef/0123456789abcdef",
+    "WebUserPoolId": "ap-northeast-1_AbCdEf123",
+    "WebUserPoolArn": "arn:aws:cognito-idp:ap-northeast-1:111122223333:userpool/ap-northeast-1_AbCdEf123",
+    "WebUserPoolClientId": "0123456789abcdefghijklmnop",
+    "WebUserPoolDomainName": "bizflow-dev-a1b2c3d4e5f6",
+    "WebUrl": "https://bizflow.example.com"
+  }
+}

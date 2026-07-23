@@ -4,7 +4,7 @@
 
 承認要求、承認、却下、承認状態取得を扱うLambdaをAWSへdeploy済みです。承認要求、状態確認、承認、DynamoDBの承認本体と監査イベントが正常に記録されることを確認しています。
 
-このLambdaはAgentCore Gateway targetへ登録しません。LLMへ承認権限を与えず、将来のNext.js BFFがCognitoで確認した利用者情報を`actor`として渡し、IAMでこの関数だけを呼び出す構成を想定しています。フロントエンド、Cognito、ECSは最後の工程で追加します。
+このLambdaはAgentCore Gateway targetへ登録しません。LLMへ承認権限を与えず、Next.js BFFがCognitoで確認した利用者情報を`actor`として渡し、IAMでこの関数だけを呼び出します。Web/BFFとWeb用CDKはローカル実装・検証済みで、Web FoundationはAWSへdeploy済み、Web Serviceは未deployです。
 
 ## Lambda操作契約
 
@@ -51,8 +51,8 @@ Lambdaは次の4つの`operation`を受け取ります。
 - 承認Lambdaには対象DynamoDB Tableの`GetItem`、`PutItem`、`Query`、`UpdateItem`だけを許可する。
 - `DeleteItem`と`Scan`は許可しない。
 - Lambda Function URLや公開API Gatewayは作成しない。
-- 将来のBFFロールへ対象関数ARNの`lambda:InvokeFunction`だけを許可する。
-- BFF実装時はリクエスト本文の利用者名を信頼せず、Cognitoの検証済みclaimsから`actor`を設定する。
+- Web BFFのTask Roleへ対象関数ARNの`lambda:InvokeFunction`だけを許可する。
+- BFFはリクエスト本文の利用者名を信頼せず、ALB/Cognitoのclaimsから`actor`を設定する。
 
 `create_business_task`を処理する書き込みLambdaは、DynamoDB内の承認状態と提案内容の完全一致を再検証します。そのため、承認Lambdaと書き込みLambdaを分離したままでも、未承認・改変済み・重複タスクを拒否できます。
 
@@ -63,7 +63,9 @@ Tools Stackには次のOutputsが追加されています。
 - `ApprovalWorkflowFunctionName`
 - `ApprovalWorkflowFunctionArn`
 
-Outputsは将来のBFF Stackから関数を参照し、最小権限のinvoke policyを作るために使用します。ARNをアプリケーションソースへ直接埋め込みません。
+OutputsはWeb Service Stackから関数を参照し、最小権限のinvoke policyを作るために使用します。ARNをアプリケーションソースへ直接埋め込みません。
+
+Next.js BFF側のAPI、Cognito承認者グループ、承認後の実行経路は [`web-application.md`](web-application.md) を参照してください。
 
 ## ローカル検証
 

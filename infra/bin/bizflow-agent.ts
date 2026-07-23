@@ -6,6 +6,8 @@ import { BizFlowAgentFoundationStack } from "../lib/foundation-stack";
 import { BizFlowAgentMemoryStack } from "../lib/memory-stack";
 import { BizFlowAgentRuntimeStack } from "../lib/runtime-stack";
 import { BizFlowAgentToolsStack } from "../lib/tools-stack";
+import { BizFlowWebFoundationStack } from "../lib/web-foundation-stack";
+import { BizFlowWebServiceStack } from "../lib/web-service-stack";
 
 const app = new App();
 const environmentName = readEnvironmentName(app);
@@ -14,6 +16,27 @@ const deploymentEnvironment: Environment = {
   account: process.env.CDK_DEFAULT_ACCOUNT,
   region: process.env.CDK_DEFAULT_REGION,
 };
+const enableWebFoundation = readBooleanContext(app, "enableWebFoundation", false);
+const webAvailabilityZones = enableWebFoundation
+  ? readRequiredContext(
+      app,
+      "webAvailabilityZones",
+      /^[a-z]{2}(?:-[a-z0-9]+)+-[0-9][a-z](?:,[a-z]{2}(?:-[a-z0-9]+)+-[0-9][a-z])+$/,
+    ).split(",")
+  : [];
+if (webAvailabilityZones.length !== 0 && webAvailabilityZones.length !== 2) {
+  throw new Error("CDK context 'webAvailabilityZones' must contain exactly two AZs.");
+}
+if (
+  webAvailabilityZones.length > 0 &&
+  deploymentEnvironment.account &&
+  deploymentEnvironment.region
+) {
+  app.node.setContext(
+    `availability-zones:account=${deploymentEnvironment.account}:region=${deploymentEnvironment.region}`,
+    webAvailabilityZones,
+  );
+}
 
 const foundationStack = new BizFlowAgentFoundationStack(
   app,
@@ -60,6 +83,116 @@ if (enableMemory) {
   Tags.of(memoryStack).add("Application", "BizFlowAgent");
   Tags.of(memoryStack).add("Environment", environmentName);
   Tags.of(memoryStack).add("ManagedBy", "AWS-CDK");
+}
+
+if (enableWebFoundation) {
+  const domainName = readDomainContext(app, "webDomainName");
+  const hostedZoneName = readDomainContext(app, "webHostedZoneName");
+  const hostedZoneId = readRequiredContext(
+    app,
+    "webHostedZoneId",
+    /^Z[A-Z0-9]+$/,
+  );
+  const certificateArn = readRequiredContext(
+    app,
+    "webCertificateArn",
+    /^arn:[a-z0-9-]+:acm:[a-z0-9-]+:[0-9]{12}:certificate\/[0-9a-f-]+$/,
+  );
+  const webFoundationStack = new BizFlowWebFoundationStack(
+    app,
+    "BizFlowWebFoundationStack",
+    {
+      env: deploymentEnvironment,
+      description: "Cognito, ECR, VPC, WAF, and HTTPS ALB for BizFlow Web",
+      environmentName,
+      availabilityZones: webAvailabilityZones,
+      domainName,
+      hostedZoneId,
+      hostedZoneName,
+      certificateArn,
+    },
+  );
+  Tags.of(webFoundationStack).add("Application", "BizFlowAgent");
+  Tags.of(webFoundationStack).add("Environment", environmentName);
+  Tags.of(webFoundationStack).add("ManagedBy", "AWS-CDK");
+}
+
+const enableWebService = readBooleanContext(app, "enableWebService", false);
+if (enableWebService) {
+  const imageDigest = readRequiredContext(
+    app,
+    "webImageDigest",
+    /^sha256:[0-9a-f]{64}$/,
+  );
+  const webOutputs = readOutputsFile(
+    app,
+    "webFoundationConfigPath",
+    "../../config/web-foundation-outputs.json",
+  );
+  const runtimeOutputs = readOutputsFile(
+    app,
+    "runtimeConfigPath",
+    "../../config/cdk-outputs.json",
+  );
+  const toolsOutputs = readOutputsFile(
+    app,
+    "toolsConfigPath",
+    "../../config/tools-outputs.json",
+  );
+  const availabilityZones = readCsvOutput(webOutputs, "WebAvailabilityZones");
+  const privateSubnetIds = readCsvOutput(webOutputs, "WebPrivateSubnetIds");
+  const privateSubnetRouteTableIds = readCsvOutput(
+    webOutputs,
+    "WebPrivateSubnetRouteTableIds",
+  );
+  if (
+    availabilityZones.length !== privateSubnetIds.length ||
+    availabilityZones.length !== privateSubnetRouteTableIds.length
+  ) {
+    throw new Error(
+      "WebAvailabilityZones, WebPrivateSubnetIds, and WebPrivateSubnetRouteTableIds must contain the same number of values.",
+    );
+  }
+  const webServiceStack = new BizFlowWebServiceStack(
+    app,
+    "BizFlowWebServiceStack",
+    {
+      env: deploymentEnvironment,
+      description: "Authenticated Next.js BFF on Amazon ECS Fargate for BizFlow",
+      environmentName,
+      imageDigest,
+      repositoryName: readOutput(webOutputs, "WebRepositoryName"),
+      repositoryArn: readOutput(webOutputs, "WebRepositoryArn"),
+      vpcId: readOutput(webOutputs, "WebVpcId"),
+      availabilityZones,
+      privateSubnetIds,
+      privateSubnetRouteTableIds,
+      clusterName: readOutput(webOutputs, "WebClusterName"),
+      webAlbSecurityGroupId: readOutput(webOutputs, "WebAlbSecurityGroupId"),
+      httpsListenerArn: readOutput(webOutputs, "WebHttpsListenerArn"),
+      userPoolId: readOutput(webOutputs, "WebUserPoolId"),
+      userPoolClientId: readOutput(webOutputs, "WebUserPoolClientId"),
+      userPoolDomainName: readOutput(webOutputs, "WebUserPoolDomainName"),
+      webUrl: readOutput(webOutputs, "WebUrl"),
+      agentRuntimeArn: readOutput(runtimeOutputs, "AgentRuntimeArn"),
+      endpointName: readOutput(runtimeOutputs, "AgentRuntimeEndpointName"),
+      readToolsFunctionName: readLambdaFunctionName(
+        toolsOutputs,
+        "ReadToolsFunctionName",
+      ),
+      writeToolsFunctionName: readLambdaFunctionName(
+        toolsOutputs,
+        "WriteToolsFunctionName",
+      ),
+      approvalFunctionName: readLambdaFunctionName(
+        toolsOutputs,
+        "ApprovalWorkflowFunctionName",
+      ),
+    },
+  );
+  Tags.of(webServiceStack).add("Application", "BizFlowAgent");
+  Tags.of(webServiceStack).add("Environment", environmentName);
+  Tags.of(webServiceStack).add("ManagedBy", "AWS-CDK");
 }
 
 const imageDigest = app.node.tryGetContext("agentImageDigest") as string | undefined;
@@ -192,6 +325,102 @@ function collectRuntimeRoleArn(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readRequiredContext(
+  cdkApp: App,
+  name: string,
+  pattern: RegExp,
+): string {
+  const value = String(cdkApp.node.tryGetContext(name) ?? "").trim();
+  if (!pattern.test(value)) {
+    throw new Error(`CDK context '${name}' is missing or has an invalid format.`);
+  }
+  return value;
+}
+
+function readDomainContext(cdkApp: App, name: string): string {
+  return readRequiredContext(
+    cdkApp,
+    name,
+    /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/,
+  ).toLowerCase();
+}
+
+function readOutputsFile(
+  cdkApp: App,
+  contextName: string,
+  defaultRelativePath: string,
+): Record<string, unknown> {
+  const configuredPath = String(
+    cdkApp.node.tryGetContext(contextName) ?? "",
+  ).trim();
+  const configPath = configuredPath
+    ? isAbsolute(configuredPath)
+      ? configuredPath
+      : resolve(process.cwd(), configuredPath)
+    : join(__dirname, defaultRelativePath);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(configPath, "utf8")) as unknown;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Unable to read outputs from '${configPath}'. ${detail}`);
+  }
+  if (!isRecord(parsed)) {
+    throw new Error(`Outputs file '${configPath}' must contain a JSON object.`);
+  }
+  return parsed;
+}
+
+function readOutput(outputs: Record<string, unknown>, key: string): string {
+  const values = new Set<string>();
+  collectOutput(outputs, key, values);
+  for (const value of Object.values(outputs)) {
+    if (isRecord(value)) {
+      collectOutput(value, key, values);
+    }
+  }
+  if (values.size !== 1) {
+    throw new Error(`Outputs must contain exactly one unique '${key}' value.`);
+  }
+  return [...values][0] as string;
+}
+
+function collectOutput(
+  value: Record<string, unknown>,
+  key: string,
+  values: Set<string>,
+): void {
+  const candidate = value[key];
+  if (typeof candidate === "string" && candidate.trim()) {
+    values.add(candidate.trim());
+  }
+}
+
+function readCsvOutput(
+  outputs: Record<string, unknown>,
+  key: string,
+): string[] {
+  const values = readOutput(outputs, key)
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (values.length < 2) {
+    throw new Error(`Output '${key}' must contain at least two comma-separated values.`);
+  }
+  return values;
+}
+
+function readLambdaFunctionName(
+  outputs: Record<string, unknown>,
+  key: string,
+): string {
+  const value = readOutput(outputs, key);
+  if (!/^[A-Za-z0-9-_]{1,64}$/.test(value)) {
+    throw new Error(`Output '${key}' must be a valid Lambda function name.`);
+  }
+  return value;
 }
 
 function readBedrockModelAccess(cdkApp: App):

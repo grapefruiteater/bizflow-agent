@@ -19,7 +19,9 @@
 | 承認バックエンドLambda | AWSへdeploy・検証済み | Gatewayから分離し、承認要求・承認・却下・状態取得を処理 |
 | Code Interpreter | AWSへ反映・検証済み | Version 6への更新時も自動スモークテスト成功 |
 | AgentCore Memory | AWSへ反映・検証済み | Version 6で同一Runtime sessionの2ターン保存・再取得に成功。長期設定は認証後に追加 |
-| Next.js・Fargate・Cognito | 未実装 | フロントエンドとECSは最後の工程で追加する |
+| Next.js Web/BFF | ローカル実装・検証済み | ダッシュボード、Agentチャット、承認カード、タスク登録、履歴画面、ローカルデモ |
+| Web Foundation | AWSへdeploy済み | Web用ECR、2 AZのVPC、Cognito、ALB、Route 53、WAF、ECS ClusterとOutputsを確認済み |
+| Web Service / Fargate | CDK実装・ローカル検証済み | ARM64イメージ、private subnet、Cognito認証Listener Rule、最小権限Task Role。AWSへは未deploy |
 
 構成図 [`bizflow_agent_architecture.drawio`](../bizflow_agent_architecture.drawio) は完成形の目標構成です。現在動いているリソースと目標構成を混同しないよう、上表を実装状況の基準とします。
 
@@ -68,7 +70,7 @@ AgentCore Gatewayへ登録するツール定義は [`tool-schema.json`](../lambd
 
 ローカルデモではメモリ保持の`MockWorkflowStore`を使います。Lambda環境では`DynamoWorkflowStore`へ切り替わり、承認、タスク、監査イベントを単一テーブルへ永続化します。
 
-承認要求、承認、却下、状態取得を行うBFF向けLambdaはAWSへ反映済みで、DynamoDBの承認本体と監査イベントを確認済みです。このLambdaはGateway targetにせず、将来のBFFからのみ呼び出します。Web画面、Cognito認証、BFFの利用者claims連携は最後の工程で追加します。
+承認要求、承認、却下、状態取得を行うBFF向けLambdaはAWSへ反映済みで、DynamoDBの承認本体と監査イベントを確認済みです。このLambdaはGateway targetにしません。Next.js BFFはCognito identityからactorを決め、承認済み提案を再取得してWrite Lambdaへ渡す実装まで完了しています。AWS上のWeb E2E検証はWeb Stack deploy後に行います。
 
 ## 面接デモの完成フロー
 
@@ -86,7 +88,7 @@ AgentCore Gatewayへ登録するツール定義は [`tool-schema.json`](../lambd
 
 ## 今後の実装順序
 
-ツール基盤のCDKソースはFoundationと通常のRuntime更新から分離し、`enableTools=true`の場合だけ定義します。既存RuntimeロールARNはOutputsから自動取得します。フロントエンドとECSは最後に追加し、それまでは業務処理、承認境界、分析機能を先に完成させます。
+ツール基盤とWeb基盤のCDKソースはFoundationおよび通常のRuntime更新から分離しています。WebはFoundationとServiceをさらに分け、ECR作成、digest固定イメージ公開、ECS Service追加を段階的に行えるようにします。
 
 1. 完了: S3へ架空CSVと社内ルールを配置する構成。
 2. 完了: DynamoDBへ承認、タスク、監査履歴を保存する構成とadapter。
@@ -100,9 +102,10 @@ AgentCore Gatewayへ登録するツール定義は [`tool-schema.json`](../lambd
 10. 完了: Runtime Version 5へCode Interpreterを反映し、Python計算とCloudWatch Logsで実呼び出しを確認する。
 11. 完了: 同一Runtime session内のAgentCore短期Memoryを実装する。
 12. 完了: Memory StackとRuntime Version 6をAWSへ反映し、2ターンの保存・再取得を確認する。
-13. 最後にCognito、Next.js/BFF、ECS/Fargate、承認カードと実行履歴画面を追加する。
-14. Cognitoの信頼済み利用者・会社IDを使う長期Memory strategyを追加する。
-15. Web承認フローのE2E検証後だけ、`create_business_task`をRuntimeの書き込み経路へ公開する。
+13. Foundation完了・Service未反映: Cognito、Next.js/BFF、ECS/Fargate、承認カードと実行履歴画面を追加する。
+14. Web Foundationはdeploy済み。BFF用Lambda更新、Webイメージpush、Web Service deployを行い、Cognitoログインからタスク登録までE2E検証する。
+15. Cognitoの信頼済み利用者・会社IDを使う長期Memory strategyを追加する。
+16. Web承認フローのE2E検証後も、タスク登録はBFF経路に限定し、RuntimeのMCP書き込みallow-listは必要性を再評価する。
 
 Tools Stackのリソース、IAM境界、データモデル、Outputs、反映前確認は [`tools-infrastructure.md`](tools-infrastructure.md) にまとめています。
 
@@ -145,9 +148,25 @@ npx cdk synth BizFlowAgentToolsStack `
   --no-lookups
 ```
 
+Web/BFFはAWSへ接続しないlocal demoで確認できます。
+
+```powershell
+Set-Location .\web
+npm ci
+npm run typecheck
+npm test
+npm run build
+$env:BIZFLOW_LOCAL_DEMO = "true"
+npm run dev
+```
+
+ブラウザで`http://127.0.0.1:3000`を開き、分析、承認、タスク登録、履歴検索を確認します。Web CDKとAWSへの段階的な反映順序は [`web-application.md`](web-application.md) に記載しています。
+
 ## AWS公式資料
 
 - [AgentCore GatewayのLambda target](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-add-target-lambda.html)
 - [AgentCore Gatewayの基本概念](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-core-concepts.html)
 - [AgentCore Code Interpreter](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/code-interpreter-tool.html)
 - [AgentCore Memory](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory.html)
+- [Application Load BalancerのCognito認証](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/listener-authenticate-users.html)
+- [AgentCore RuntimeをSDKから呼び出す](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-invoke-agent.html)

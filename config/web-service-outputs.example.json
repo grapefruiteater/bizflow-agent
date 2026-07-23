@@ -1,0 +1,9 @@
+{
+  "BizFlowWebServiceStack": {
+    "WebServiceName": "bizflow-web-dev",
+    "WebTaskRoleArn": "arn:aws:iam::111122223333:role/BizFlowWebServiceStack-WebTaskDefinitionTaskRole-example",
+    "WebTargetGroupArn": "arn:aws:elasticloadbalancing:ap-northeast-1:111122223333:targetgroup/bizflow-web-dev/0123456789abcdef",
+    "WebImageDigest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "WebUrl": "https://bizflow.example.com"
+  }
+}

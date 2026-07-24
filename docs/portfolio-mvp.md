@@ -14,7 +14,7 @@
 | 架空業務データ | ローカル実装済み | 個人情報を含まないCSVとMarkdownの社内ルール |
 | Lambda業務ツール | CDK・ローカル実装済み | Gateway Lambda target互換の5ツール、S3/DynamoDB adapter、読み取り・書き込み関数の分離 |
 | Human-in-the-loop境界 | CDK・ローカル実装済み | DynamoDBで未承認拒否、承認後改変拒否、重複登録防止、監査記録 |
-| S3・DynamoDB・Lambda・Gateway | AWSへdeploy済み | 2026-07-22にTools Stackを反映し、Outputsを環境別設定へ保存 |
+| S3・DynamoDB・Lambda・Gateway | AWSへdeploy済み | 2026-07-22に初期反映、2026-07-24にWeb BFF直接呼び出し形式を更新 |
 | Runtimeからのツール選択 | AWSへ反映済み | Version 6でSigV4 MCP clientから4つの読み取りツールだけを公開 |
 | 承認バックエンドLambda | AWSへdeploy・検証済み | Gatewayから分離し、承認要求・承認・却下・状態取得を処理 |
 | Code Interpreter | AWSへ反映・検証済み | Version 6への更新時も自動スモークテスト成功 |
@@ -103,7 +103,7 @@ AgentCore Gatewayへ登録するツール定義は [`tool-schema.json`](../lambd
 11. 完了: 同一Runtime session内のAgentCore短期Memoryを実装する。
 12. 完了: Memory StackとRuntime Version 6をAWSへ反映し、2ターンの保存・再取得を確認する。
 13. Foundation完了・Service未反映: Cognito、Next.js/BFF、ECS/Fargate、承認カードと実行履歴画面を追加する。
-14. Web Foundationはdeploy済み。BFF用Lambda更新、Webイメージpush、Web Service deployを行い、Cognitoログインからタスク登録までE2E検証する。
+14. Web FoundationとBFF用Lambda更新はdeploy済み。Webイメージpush、Web Service deployを行い、Cognitoログインからタスク登録までE2E検証する。
 15. Cognitoの信頼済み利用者・会社IDを使う長期Memory strategyを追加する。
 16. Web承認フローのE2E検証後も、タスク登録はBFF経路に限定し、RuntimeのMCP書き込みallow-listは必要性を再評価する。
 

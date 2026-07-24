@@ -18,6 +18,7 @@ AWS基盤は、以前のアプリやCDKスタックで作成したリソース�
 | Gateway読み取りツール | 4ツールをRuntimeへ接続済み |
 | Gateway書き込みツール | AWSへdeploy済みだがRuntimeから除外 |
 | S3・DynamoDB・Lambda・Gateway | `BizFlowAgentToolsStack`としてdeploy済み |
+| Web BFF用Lambda直接呼び出し | 2026-07-24にTools Stackへ反映済み |
 | CloudWatch Logs | `PROD`の呼び出しログを確認済み |
 | 承認バックエンドLambda | AWSへdeploy・動作確認済み |
 | Code Interpreter | Runtime Version 6でも自動スモークテスト成功 |

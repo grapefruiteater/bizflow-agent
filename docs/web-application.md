@@ -4,7 +4,7 @@
 
 Next.jsのダッシュボード、Agentチャット、承認カード、タスク登録、承認履歴画面と、それらをAWSへ配置する2つのCDK Stackを実装済みです。2026-07-22時点ではローカルテスト、Next.js本番ビルド、`linux/arm64` Docker build、ローカルコンテナのヘルスチェック、CDKテストと`--no-lookups` synthまで完了しています。
 
-2026-07-23に`BizFlowWebFoundationStack`をAWSへdeployし、Web用ECR、VPC、Cognito、ALB、Route 53 Alias、WAF、ECS Cluster、Outputsを確認済みです。`BizFlowWebServiceStack`はまだdeployしていないため、現時点のWeb URLがALBの既定`503`応答になるのは正常です。既にAWSで稼働しているRuntime Version 6、Tools Stack、Memory StackへFoundation deployによる変更は加えていません。
+2026-07-23に`BizFlowWebFoundationStack`をAWSへdeployし、Web用ECR、VPC、Cognito、ALB、Route 53 Alias、WAF、ECS Cluster、Outputsを確認済みです。2026-07-24にはTools StackへWeb BFF用のRead/Write Lambda直接呼び出し形式を反映済みです。`BizFlowWebServiceStack`はまだdeployしていないため、現時点のWeb URLがALBの既定`503`応答になるのは正常です。既にAWSで稼働しているRuntime Version 6とMemory StackへWeb関連deployによる変更は加えていません。
 
 ## 構成
 

@@ -15,7 +15,7 @@ export async function POST(
 ): Promise<Response> {
   try {
     requireCsrfHeader(request);
-    const identity = getIdentity(request);
+    const identity = await getIdentity(request);
     requireApprover(identity);
     const { approvalId: rawApprovalId } = await context.params;
     const approvalId = requireApprovalId(rawApprovalId);

@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request): Promise<Response> {
   try {
-    const identity = getIdentity(request);
+    const identity = await getIdentity(request);
     const dashboard = await getDashboard();
     return Response.json({ ok: true, identity, dashboard });
   } catch (error) {

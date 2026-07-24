@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request): Promise<Response> {
   try {
     requireCsrfHeader(request);
-    const identity = getIdentity(request);
+    const identity = await getIdentity(request);
     const body = await readJsonObject(request);
     const prompt = requireText(body.prompt, "依頼", 4000);
     const runtimeSessionId = deriveRuntimeSessionId(identity.actor, body.conversationId);

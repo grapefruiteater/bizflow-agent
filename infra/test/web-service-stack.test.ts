@@ -61,6 +61,14 @@ describe("BizFlowWebServiceStack", () => {
           Environment: Match.arrayWith([
             { Name: "HOSTNAME", Value: "0.0.0.0" },
             { Name: "PORT", Value: "3000" },
+            {
+              Name: "BIZFLOW_COGNITO_USER_POOL_ID",
+              Value: "ap-northeast-1_AbCdEf123",
+            },
+            {
+              Name: "BIZFLOW_COGNITO_CLIENT_ID",
+              Value: "0123456789abcdefghijklmnop",
+            },
           ]),
         }),
       ]),

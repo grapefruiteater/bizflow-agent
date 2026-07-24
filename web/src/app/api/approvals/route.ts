@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request): Promise<Response> {
   try {
     requireCsrfHeader(request);
-    const identity = getIdentity(request);
+    const identity = await getIdentity(request);
     const body = await readJsonObject(request);
     const proposal = requireTaskProposal(body.proposal);
     const result = await requestApproval(identity.actor, proposal);

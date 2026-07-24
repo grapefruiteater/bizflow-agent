@@ -10,7 +10,7 @@ export async function GET(
   context: { params: Promise<{ approvalId: string }> },
 ): Promise<Response> {
   try {
-    const identity = getIdentity(request);
+    const identity = await getIdentity(request);
     const { approvalId: rawApprovalId } = await context.params;
     const approvalId = requireApprovalId(rawApprovalId);
     const result = await getApproval(identity.actor, approvalId);

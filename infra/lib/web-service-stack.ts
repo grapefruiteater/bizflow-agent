@@ -162,6 +162,8 @@ export class BizFlowWebServiceStack extends Stack {
         BIZFLOW_READ_TOOLS_FUNCTION_NAME: props.readToolsFunctionName,
         BIZFLOW_WRITE_TOOLS_FUNCTION_NAME: props.writeToolsFunctionName,
         BIZFLOW_APPROVAL_FUNCTION_NAME: props.approvalFunctionName,
+        BIZFLOW_COGNITO_USER_POOL_ID: props.userPoolId,
+        BIZFLOW_COGNITO_CLIENT_ID: props.userPoolClientId,
         BIZFLOW_DATA_START_DATE: "2026-07-09",
         BIZFLOW_DATA_END_DATE: "2026-07-13",
         BIZFLOW_ANALYSIS_AS_OF: "2026-07-14",

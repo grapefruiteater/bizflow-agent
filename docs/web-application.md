@@ -2,9 +2,11 @@
 
 ## 現在の状態
 
-Next.jsのダッシュボード、Agentチャット、承認カード、タスク登録、承認履歴画面と、それらをAWSへ配置する2つのCDK Stackを実装済みです。2026-07-22時点ではローカルテスト、Next.js本番ビルド、`linux/arm64` Docker build、ローカルコンテナのヘルスチェック、CDKテストと`--no-lookups` synthまで完了しています。
+Next.jsのダッシュボード、Agentチャット、承認カード、タスク登録、承認履歴画面と、それらをAWSへ配置する2つのCDK Stackを実装済みです。ローカルテスト、Next.js本番ビルド、`linux/arm64` Docker build、ローカルコンテナのヘルスチェック、CDKテストと`--no-lookups` synthまで完了しています。
 
-2026-07-23に`BizFlowWebFoundationStack`をAWSへdeployし、Web用ECR、VPC、Cognito、ALB、Route 53 Alias、WAF、ECS Cluster、Outputsを確認済みです。2026-07-24にはTools StackへWeb BFF用のRead/Write Lambda直接呼び出し形式を反映済みです。`BizFlowWebServiceStack`はまだdeployしていないため、現時点のWeb URLがALBの既定`503`応答になるのは正常です。既にAWSで稼働しているRuntime Version 6とMemory StackへWeb関連deployによる変更は加えていません。
+2026-07-23に`BizFlowWebFoundationStack`をAWSへdeployし、Web用ECR、VPC、Cognito、ALB、Route 53 Alias、WAF、ECS Cluster、Outputsを確認済みです。2026-07-24にはTools StackへWeb BFF用のRead/Write Lambda直接呼び出し形式を反映し、`BizFlowWebServiceStack`もdeployしました。Cognitoログイン、ダッシュボード、Agent分析のAWS E2Eを確認済みです。既にAWSで稼働しているRuntime Version 6とMemory StackへWeb関連deployによる変更は加えていません。
+
+ALBの`x-amzn-oidc-data`はCognito ID tokenではなくUserInfo由来のclaimsであり、`cognito:groups`を認可元として期待できません。BFFは`x-amzn-oidc-accesstoken`をCognito User Poolとapp clientに対して署名検証し、access tokenの`sub`とALB identityの一致を確認してから`cognito:groups`を評価します。この修正はローカルテストと本番ビルドまで完了しており、次のWeb Service更新でAWSへ反映します。
 
 ## 構成
 
@@ -70,7 +72,8 @@ AWS接続時の登録済みタスク総数は、一覧取得用index/APIをま�
 
 - ALBがCognito認証を完了してからECSへrequestをforwardする。
 - ECS TaskのSecurity GroupはALB Security Groupからのポート3000だけを許可する。
-- BFFはALBが付加するCognito identity/claimsから利用者を特定する。
+- BFFはALBが付加するCognito access tokenを署名・User Pool・app clientまで検証し、tokenの`sub`とALB identityが一致した利用者だけを受け入れる。
+- `cognito:groups`は検証済みaccess tokenから読み取り、UserInfo由来の`x-amzn-oidc-data`を認可判断に使用しない。
 - `approve`、`reject`、`execute`は`BizFlowApprovers`グループだけに許可する。
 - state-changing APIは`x-bizflow-csrf: 1`ヘッダーを必須にする。
 - AgentCore Runtime session IDは、認証済みactorとブラウザ内conversation IDからBFFがSHA-256で生成する。request本文に任意のRuntime session IDを指定させない。

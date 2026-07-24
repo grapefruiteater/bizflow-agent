@@ -1,8 +1,23 @@
 import { createHash } from "node:crypto";
+import { CognitoJwtVerifier } from "aws-jwt-verify";
 import type { Identity } from "@/lib/contracts";
 import { AppError, requireText } from "@/lib/errors";
 
 const APPROVER_GROUP = "BizFlowApprovers";
+const COGNITO_USER_POOL_ID_ENVIRONMENT_VARIABLE =
+  "BIZFLOW_COGNITO_USER_POOL_ID";
+const COGNITO_CLIENT_ID_ENVIRONMENT_VARIABLE = "BIZFLOW_COGNITO_CLIENT_ID";
+
+export interface AccessTokenVerifier {
+  verify(token: string): Promise<unknown>;
+}
+
+let configuredVerifier:
+  | {
+      configurationKey: string;
+      verifier: AccessTokenVerifier;
+    }
+  | undefined;
 
 export function isLocalDemo(): boolean {
   if (process.env.BIZFLOW_LOCAL_DEMO === "true") {
@@ -14,7 +29,10 @@ export function isLocalDemo(): boolean {
   return process.env.NODE_ENV !== "production";
 }
 
-export function getIdentity(request: Request): Identity {
+export async function getIdentity(
+  request: Request,
+  verifier?: AccessTokenVerifier,
+): Promise<Identity> {
   if (isLocalDemo()) {
     return {
       actor: "demo-user",
@@ -25,21 +43,36 @@ export function getIdentity(request: Request): Identity {
     };
   }
 
-  const actor = request.headers.get("x-amzn-oidc-identity")?.trim();
-  if (!actor || actor.length > 128) {
+  const albIdentity = request.headers.get("x-amzn-oidc-identity")?.trim();
+  const accessToken = request.headers.get("x-amzn-oidc-accesstoken")?.trim();
+  if (
+    !albIdentity ||
+    albIdentity.length > 128 ||
+    !accessToken ||
+    accessToken.length > 16384
+  ) {
     throw new AppError("UNAUTHENTICATED", "Cognito認証が必要です。", 401);
   }
-  const claims = decodeAlbClaims(request.headers.get("x-amzn-oidc-data"));
+
+  const claims = await verifyAccessToken(
+    accessToken,
+    verifier ?? getConfiguredAccessTokenVerifier(),
+  );
+  const subject = typeof claims.sub === "string" ? claims.sub.trim() : "";
+  if (!subject || subject !== albIdentity) {
+    throw new AppError("UNAUTHENTICATED", "Cognito認証が必要です。", 401);
+  }
+
   const groups = normalizeGroups(claims["cognito:groups"]);
-  const email = typeof claims.email === "string" ? claims.email : undefined;
+  const username =
+    typeof claims.username === "string" && claims.username.trim()
+      ? claims.username.trim()
+      : undefined;
   const displayName =
-    typeof claims.name === "string" && claims.name.trim()
-      ? claims.name.trim()
-      : email ?? `利用者 ${actor.slice(0, 8)}`;
+    username ?? `利用者 ${subject.slice(0, 8)}`;
   return {
-    actor: `cognito:${actor}`,
+    actor: `cognito:${subject}`,
     displayName,
-    email,
     groups,
     isApprover: groups.includes(APPROVER_GROUP),
   };
@@ -75,23 +108,41 @@ export function deriveRuntimeSessionId(actor: string, conversationId: unknown): 
     .digest("hex");
 }
 
-function decodeAlbClaims(value: string | null): Record<string, unknown> {
-  if (!value) {
-    return {};
+function getConfiguredAccessTokenVerifier(): AccessTokenVerifier {
+  const userPoolId = requireAuthEnvironment(
+    COGNITO_USER_POOL_ID_ENVIRONMENT_VARIABLE,
+  );
+  const clientId = requireAuthEnvironment(
+    COGNITO_CLIENT_ID_ENVIRONMENT_VARIABLE,
+  );
+  const configurationKey = `${userPoolId}\n${clientId}`;
+  if (configuredVerifier?.configurationKey !== configurationKey) {
+    configuredVerifier = {
+      configurationKey,
+      verifier: CognitoJwtVerifier.create({
+        userPoolId,
+        tokenUse: "access",
+        clientId,
+      }),
+    };
   }
-  const segments = value.split(".");
-  if (segments.length !== 3) {
-    return {};
-  }
+  return configuredVerifier.verifier;
+}
+
+async function verifyAccessToken(
+  token: string,
+  verifier: AccessTokenVerifier,
+): Promise<Record<string, unknown>> {
+  let claims: unknown;
   try {
-    const decoded = Buffer.from(segments[1] as string, "base64url").toString("utf8");
-    const parsed: unknown = JSON.parse(decoded);
-    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
+    claims = await verifier.verify(token);
   } catch {
-    return {};
+    throw new AppError("UNAUTHENTICATED", "Cognito認証が必要です。", 401);
   }
+  if (typeof claims !== "object" || claims === null || Array.isArray(claims)) {
+    throw new AppError("UNAUTHENTICATED", "Cognito認証が必要です。", 401);
+  }
+  return claims as Record<string, unknown>;
 }
 
 function normalizeGroups(value: unknown): string[] {
@@ -102,4 +153,16 @@ function normalizeGroups(value: unknown): string[] {
     return value.split(",").map((item) => item.trim()).filter(Boolean);
   }
   return [];
+}
+
+function requireAuthEnvironment(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new AppError(
+      "SERVER_MISCONFIGURED",
+      `${name}が設定されていません。`,
+      503,
+    );
+  }
+  return value;
 }

@@ -23,9 +23,9 @@ AWS基盤は、以前のアプリやCDKスタックで作成したリソース�
 | 承認バックエンドLambda | AWSへdeploy・動作確認済み |
 | Code Interpreter | Runtime Version 6でも自動スモークテスト成功 |
 | AgentCore Memory | Runtime Version 6へ接続し、2ターンの保存・再取得を検証済み |
-| Next.js Web/BFF | ダッシュボード、Agentチャット、承認カード、タスク登録、履歴画面をローカル実装・検証済み |
+| Next.js Web/BFF | ECS/Fargateへdeploy済み。ダッシュボードとAgent分析のAWS E2Eを検証済み |
 | Web Foundation | 2026-07-23にECR、VPC、Cognito、ALB、Route 53、WAF、ECS ClusterをAWSへdeploy・確認済み |
-| Web Service / ECS Fargate | CDKソース、テスト、`--no-lookups` synthまで完了。AWSへは未deploy |
+| Web Service / ECS Fargate | AWSへdeploy済み。Cognitoグループ認可修正はローカル実装・検証済みで、次のWeb更新で反映予定 |
 
 現在の利用者向け動作は読み取り専用です。モデルは`get_business_requests`、`analyze_request_data`、`search_company_rules`、`get_task_status`を選択できますが、`create_business_task`はMCP allow-listとRuntime側の再フィルタの両方で除外しています。承認されていない書き込みをモデルの判断だけで実行することはありません。
 

@@ -35,7 +35,7 @@ logging.basicConfig(
 
 app = FastAPI(
     title="BizFlow Agent Runtime",
-    version="0.5.0",
+    version="0.6.0",
     docs_url=None,
     redoc_url=None,
 )
@@ -134,7 +134,8 @@ def handle_invocation(payload: dict[str, Any], session_id: str | None) -> dict[s
                 LOGGER.exception("Continuing without short-term memory context")
                 memory_status["degraded"] = True
 
-    response_text = get_analyzer().analyze(analysis_prompt)
+    analysis = get_analyzer().analyze(analysis_prompt)
+    response_text = analysis.response
     if memory is not None and session_id:
         try:
             memory.save_turn(session_id, prompt.strip(), response_text)
@@ -147,6 +148,10 @@ def handle_invocation(payload: dict[str, Any], session_id: str | None) -> dict[s
 
     result: dict[str, Any] = {
         "response": response_text,
+        "output_contract_version": "1.0",
+        "proposed_actions": [
+            action.model_dump(mode="json") for action in analysis.proposed_actions
+        ],
         "status": "success",
         "execution_mode": "READ_ONLY",
         "write_operations_performed": False,

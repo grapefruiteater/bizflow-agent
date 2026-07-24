@@ -12,7 +12,7 @@ RUN python -m pip install --no-cache-dir --requirement requirements.txt \
     && groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --home-dir /app app
 
-COPY --chown=app:app app.py bizflow_agent.py business_data.py code_interpreter_tools.py conversation_memory.py gateway_tools.py ./
+COPY --chown=app:app app.py analysis_output.py bizflow_agent.py business_data.py code_interpreter_tools.py conversation_memory.py gateway_tools.py ./
 
 USER app
 

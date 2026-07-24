@@ -3,14 +3,15 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from agents.bizflow import app as runtime_module
+from agents.bizflow.analysis_output import AgentAnalysis, ProposedAction
 
 
 client = TestClient(runtime_module.app)
 
 
 class FakeAnalyzer:
-    def analyze(self, prompt: str) -> str:
-        return f"Analysis result: {prompt}"
+    def analyze(self, prompt: str) -> AgentAnalysis:
+        return AgentAnalysis(response=f"Analysis result: {prompt}")
 
 
 def setup_function() -> None:
@@ -32,6 +33,8 @@ def test_invocations_accepts_prompt() -> None:
     assert response.status_code == 200
     assert response.json() == {
         "response": "Analysis result: Analyze this process",
+        "output_contract_version": "1.0",
+        "proposed_actions": [],
         "status": "success",
         "execution_mode": "READ_ONLY",
         "write_operations_performed": False,
@@ -88,9 +91,9 @@ def test_invocations_loads_and_saves_optional_session_memory() -> None:
         def __init__(self) -> None:
             self.prompt = ""
 
-        def analyze(self, prompt: str) -> str:
+        def analyze(self, prompt: str) -> AgentAnalysis:
             self.prompt = prompt
-            return "remembered response"
+            return AgentAnalysis(response="remembered response")
 
     session_id = "11111111-2222-3333-4444-555555555555"
     memory = FakeMemory()
@@ -175,9 +178,21 @@ def test_invocations_analyzes_structured_business_data() -> None:
         def __init__(self) -> None:
             self.prompt = ""
 
-        def analyze(self, prompt: str) -> str:
+        def analyze(self, prompt: str) -> AgentAnalysis:
             self.prompt = prompt
-            return "期限超過のINQ-001を最優先にしてください。"
+            return AgentAnalysis(
+                response="期限超過のINQ-001を最優先にしてください。",
+                proposed_actions=[
+                    ProposedAction(
+                        request_id="INQ-001",
+                        assignee="support-lead",
+                        due_date="2026-07-21",
+                        action="期限超過の問い合わせへ回答する",
+                        rationale="期限超過かつ緊急度が高いため",
+                        rule_ids=[],
+                    )
+                ],
+            )
 
     analyzer = CapturingAnalyzer()
     runtime_module._ANALYZER = analyzer
@@ -203,6 +218,7 @@ def test_invocations_analyzes_structured_business_data() -> None:
 
     assert response.status_code == 200
     assert response.json()["response"] == "期限超過のINQ-001を最優先にしてください。"
+    assert response.json()["proposed_actions"][0]["request_id"] == "INQ-001"
     assert response.json()["analysis_context"] == {
         "as_of": "2026-07-21T10:00:00+09:00",
         "total_inquiries": 1,
@@ -304,7 +320,7 @@ def test_invocations_rejects_missing_prompt() -> None:
 
 def test_invocations_returns_503_when_model_configuration_is_missing() -> None:
     class MissingConfigurationAnalyzer:
-        def analyze(self, _prompt: str) -> str:
+        def analyze(self, _prompt: str) -> AgentAnalysis:
             raise runtime_module.AgentConfigurationError("secret configuration detail")
 
     runtime_module._ANALYZER = MissingConfigurationAnalyzer()

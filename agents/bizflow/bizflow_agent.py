@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 try:
+    from .analysis_output import AgentAnalysis, ProposedAction
     from .code_interpreter_tools import (
         CODE_INTERPRETER_ID_ENVIRONMENT_VARIABLE,
         CodeInterpreterConfigurationError,
@@ -24,6 +25,7 @@ try:
         validate_gateway_url,
     )
 except ImportError:  # The container starts this module directly from /app.
+    from analysis_output import AgentAnalysis, ProposedAction
     from code_interpreter_tools import (
         CODE_INTERPRETER_ID_ENVIRONMENT_VARIABLE,
         CodeInterpreterConfigurationError,
@@ -57,6 +59,14 @@ BASE_SYSTEM_PROMPT = """\
 
 回答は原則として「要約」「根拠」「提案」「不足情報」「承認待ちの操作」の順に簡潔にまとめてください。
 該当事項がない項目は省略できます。
+
+構造化出力のproposed_actionsには次の制約があります。
+- 業務ツールまたは正規化済みbusiness_dataから実際に得たrequest_idだけを使用する。
+- 対応が必要な案件を優先順に最大5件まで提案する。
+- 担当者、期限、具体的な対応内容、提案理由を必ず示す。
+- rule_idsにはsearch_company_rulesが実際に返したRULE IDだけを含める。
+- 根拠が足りない場合や対応不要の場合は空配列にする。
+- proposed_actionsは未承認の提案であり、登録・承認済みとは表現しない。
 """
 
 NO_TOOLS_SYSTEM_PROMPT = BASE_SYSTEM_PROMPT + """\
@@ -233,6 +243,7 @@ def create_strands_agent(settings: AgentSettings) -> AgentRunner:
             model=model,
             system_prompt=system_prompt,
             tools=[*tools, *code_interpreter_tools],
+            structured_output_model=AgentAnalysis,
             callback_handler=None,
             load_tools_from_directory=False,
         )
@@ -259,8 +270,23 @@ def create_strands_agent(settings: AgentSettings) -> AgentRunner:
 class LocalTestAgent:
     """Deterministic no-AWS agent used only when explicitly selected locally."""
 
-    def __call__(self, prompt: str) -> str:
-        return f"Local read-only analysis completed: {prompt}"
+    def __call__(self, prompt: str) -> Any:
+        class LocalResult:
+            structured_output = AgentAnalysis(
+                response=f"Local read-only analysis completed: {prompt}",
+                proposed_actions=[
+                    ProposedAction(
+                        request_id="REQ-LOCAL",
+                        assignee="local-reviewer",
+                        due_date="2026-07-14",
+                        action="Review the local test request.",
+                        rationale="Deterministic local structured-output test.",
+                        rule_ids=[],
+                    )
+                ],
+            )
+
+        return LocalResult()
 
 
 def create_configured_agent(settings: AgentSettings) -> AgentRunner:
@@ -280,10 +306,15 @@ class BizFlowAnalyzer:
         self._settings_factory = settings_factory
         self._agent_factory = agent_factory
 
-    def analyze(self, prompt: str) -> str:
+    def analyze(self, prompt: str) -> AgentAnalysis:
         settings = self._settings_factory()
         result = self._agent_factory(settings)(prompt)
-        response_text = str(result).strip()
-        if not response_text:
-            raise RuntimeError("The model returned an empty response.")
-        return response_text
+        structured_output = getattr(result, "structured_output", None)
+        if isinstance(structured_output, AgentAnalysis):
+            return structured_output
+        try:
+            return AgentAnalysis.model_validate(structured_output)
+        except Exception as exc:
+            raise RuntimeError(
+                "The model returned an invalid structured response."
+            ) from exc

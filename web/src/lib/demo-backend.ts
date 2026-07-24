@@ -69,6 +69,28 @@ export function invokeDemoAgent(prompt: string): AgentResult {
       "",
       "書き込みは行っていません。右側の承認カードから提案内容を確認してください。",
     ].join("\n"),
+    output_contract_version: "1.0",
+    proposed_actions: [
+      {
+        request_id: "REQ-002",
+        assignee: "support-lead",
+        due_date: "2026-07-14",
+        action:
+          "障害状況を確認し、チームリーダーへエスカレーションしたうえで顧客へ一次回答する",
+        rationale:
+          "期限超過かつ緊急度highの障害案件で、2時間以内の担当確定とリーダーへのエスカレーションが必要なため",
+        rule_ids: ["RULE-001", "RULE-002"],
+      },
+      {
+        request_id: "REQ-005",
+        assignee: "integration-support",
+        due_date: "2026-07-14",
+        action: "連携APIのエラー状況を確認し、復旧方針を顧客へ連絡する",
+        rationale:
+          "緊急度highの障害案件で、担当者を速やかに確定する必要があるため",
+        rule_ids: ["RULE-001"],
+      },
+    ],
     status: "success",
     execution_mode: "READ_ONLY",
     write_operations_performed: false,

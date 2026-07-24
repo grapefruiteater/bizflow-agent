@@ -25,6 +25,7 @@ import {
   addAnalysisScope,
   analysisScopeFromEnvironment,
 } from "@/lib/analysis-scope";
+import { requireAgentResult } from "@/lib/validation";
 
 const region = process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION ?? "ap-northeast-1";
 const lambdaClient = new LambdaClient({ region });
@@ -107,10 +108,7 @@ export async function invokeAgent(
   } catch {
     throw new AppError("INVALID_AGENT_RESPONSE", "AgentCore応答を解析できません。", 502);
   }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new AppError("INVALID_AGENT_RESPONSE", "AgentCore応答形式が不正です。", 502);
-  }
-  return parsed as AgentResult;
+  return requireAgentResult(parsed);
 }
 
 export async function requestApproval(

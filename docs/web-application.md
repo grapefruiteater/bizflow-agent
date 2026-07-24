@@ -6,7 +6,9 @@ Next.jsのダッシュボード、Agentチャット、承認カード、タス�
 
 2026-07-23に`BizFlowWebFoundationStack`をAWSへdeployし、Web用ECR、VPC、Cognito、ALB、Route 53 Alias、WAF、ECS Cluster、Outputsを確認済みです。2026-07-24にはTools StackへWeb BFF用のRead/Write Lambda直接呼び出し形式を反映し、`BizFlowWebServiceStack`もdeployしました。Cognitoログイン、ダッシュボード、Agent分析のAWS E2Eを確認済みです。既にAWSで稼働しているRuntime Version 6とMemory StackへWeb関連deployによる変更は加えていません。
 
-ALBの`x-amzn-oidc-data`はCognito ID tokenではなくUserInfo由来のclaimsであり、`cognito:groups`を認可元として期待できません。BFFは`x-amzn-oidc-accesstoken`をCognito User Poolとapp clientに対して署名検証し、access tokenの`sub`とALB identityの一致を確認してから`cognito:groups`を評価します。この修正はローカルテストと本番ビルドまで完了しており、次のWeb Service更新でAWSへ反映します。
+ALBの`x-amzn-oidc-data`はCognito ID tokenではなくUserInfo由来のclaimsであり、`cognito:groups`を認可元として期待できません。BFFは`x-amzn-oidc-accesstoken`をCognito User Poolとapp clientに対して署名検証し、access tokenの`sub`とALB identityの一致を確認してから`cognito:groups`を評価します。この修正はAWSへ反映済みで、`BizFlowApprovers`利用者による分析、承認、タスク登録、監査イベント3件のE2Eを確認済みです。
+
+Agentの文章から承認内容を推測する処理は行いません。次回反映用ソースではRuntimeが`output_contract_version: "1.0"`と検証済み`proposed_actions`を返し、BFFが契約を再検証して承認カードへ自動反映します。複数候補は選択でき、理由と参照ルールを表示します。このRuntime/Web更新はローカルテストとARM64 Docker buildまで完了し、AWS反映前です。
 
 ## 構成
 
@@ -67,6 +69,20 @@ Web Task Roleから3つの業務Lambdaを直接呼び出すIAM Resourceには、
 - `/api/approvals/{approvalId}/execute`: 承認ストアから提案を再取得し、同じ内容のタスクを登録
 
 AWS接続時の登録済みタスク総数は、一覧取得用index/APIをまだ追加していないため、初期表示では`0`です。現在のブラウザセッションで登録した結果は画面へ反映します。永続的な件数表示は次の改善項目です。
+
+## Agent構造化結果と承認カード
+
+`/api/agent`が受け入れる成功応答には、次が必須です。
+
+- `output_contract_version`が`1.0`
+- `status`が`success`
+- `execution_mode`が`READ_ONLY`
+- `write_operations_performed`が`false`
+- `proposed_actions`が0～5件
+- 各提案の問い合わせID、担当者、期限、対応内容、理由が入力制約内
+- `rule_ids`が`RULE-xxx`形式
+
+BFF境界で不正なRuntime応答を検出した場合は`INVALID_AGENT_RESPONSE`としてHTTP 502を返し、承認カードへ反映しません。正常な分析を再実行すると、以前の承認・タスク表示をクリアして先頭候補をカードへ設定します。利用者は別候補を選択でき、承認要求を作るまでは担当者、期限、対応内容を編集できます。承認要求作成後は全フィールドを固定します。
 
 ## 認証と承認境界
 
@@ -141,7 +157,7 @@ Serviceは次のGit管理外Outputsを読みます。
 
 ## AWS反映順序
 
-以下はユーザーが対象Account、Region、差分と費用を確認した後に実行する手順です。この実装作業では実行していません。
+初回Web構築の次の手順は2026-07-24までに完了しています。将来の再構築や別環境への反映時も同じ順序を使用します。
 
 1. `BizFlowWebFoundationStack`の`cdk diff`を確認する。
 2. 明示判断後にFoundationだけをdeployし、Outputsを`config/web-foundation-outputs.json`へ保存する。
@@ -151,6 +167,8 @@ Serviceは次のGit管理外Outputsを読みます。
 6. 明示判断後にServiceだけをdeployし、Outputsを`config/web-service-outputs.json`へ保存する。
 7. Cognitoへデモ利用者を作り、`BizFlowUsers`と必要に応じて`BizFlowApprovers`へ追加する。
 8. HTTPS URLからログイン、分析、承認、登録、履歴をE2E確認する。
+
+構造化提案の更新は、旧Webが追加フィールドを無視できるためRuntimeを先に公開します。新Runtimeを`PROD`へ昇格して`output_contract_version`と`proposed_actions`をスモークテストした後、同じGit SHAのWebイメージを公開してWeb Serviceを更新し、分析結果から承認カード、承認、タスク登録、監査履歴までを再確認します。
 
 Foundationの差分確認例です。
 

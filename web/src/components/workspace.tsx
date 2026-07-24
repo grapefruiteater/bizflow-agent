@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type {
+  AgentProposedAction,
   AgentResult,
   ApprovalBundle,
   BusinessTask,
@@ -14,11 +15,11 @@ import type {
 const DEFAULT_PROMPT =
   "今週の問い合わせを分析し、緊急度が高く、まだ対応されていない案件を抽出してください。社内対応ルールも確認して対応案を作成してください。";
 
-const DEFAULT_PROPOSAL: TaskProposal = {
-  request_id: "REQ-002",
-  assignee: "support-lead",
-  due_date: "2026-07-14",
-  action: "障害状況を確認し、チームリーダーへエスカレーションしたうえで顧客へ一次回答する",
+const EMPTY_PROPOSAL: TaskProposal = {
+  request_id: "",
+  assignee: "",
+  due_date: "",
+  action: "",
 };
 
 export function Workspace() {
@@ -26,7 +27,8 @@ export function Workspace() {
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [agentResult, setAgentResult] = useState<AgentResult | null>(null);
-  const [proposal, setProposal] = useState(DEFAULT_PROPOSAL);
+  const [proposal, setProposal] = useState(EMPTY_PROPOSAL);
+  const [selectedActionIndex, setSelectedActionIndex] = useState(0);
   const [approval, setApproval] = useState<ApprovalBundle | null>(null);
   const [task, setTask] = useState<BusinessTask | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -63,6 +65,14 @@ export function Workspace() {
         conversationId,
       });
       setAgentResult(payload.result);
+      setApproval(null);
+      setTask(null);
+      setSelectedActionIndex(0);
+      setProposal(
+        payload.result.proposed_actions.length
+          ? toTaskProposal(payload.result.proposed_actions[0] as AgentProposedAction)
+          : EMPTY_PROPOSAL,
+      );
     } catch (caught) {
       setError(messageOf(caught));
     } finally {
@@ -138,6 +148,18 @@ export function Workspace() {
         .sort((left, right) => left.due_date.localeCompare(right.due_date)) ?? [],
     [dashboard],
   );
+  const selectedAction =
+    agentResult?.proposed_actions[selectedActionIndex] ?? null;
+  const proposalComplete = Object.values(proposal).every(
+    (value) => value.trim().length > 0,
+  );
+
+  function selectProposedAction(index: number) {
+    const action = agentResult?.proposed_actions[index];
+    if (!action || approval) return;
+    setSelectedActionIndex(index);
+    setProposal(toTaskProposal(action));
+  }
 
   return (
     <div className="app-shell">
@@ -238,13 +260,58 @@ export function Workspace() {
             <article className="panel approval-panel">
               <div className="panel-title"><div><p className="eyebrow">HUMAN IN THE LOOP</p><h3>承認カード</h3></div><StatusBadge status={approval?.approval.status ?? "DRAFT"} /></div>
               <p className="approval-note">AIはここを実行できません。内容を確認した利用者だけが承認できます。</p>
+              {!agentResult && (
+                <p className="proposal-empty">
+                  分析を実行すると、Agentの構造化された対応案がここへ反映されます。
+                </p>
+              )}
+              {agentResult && agentResult.proposed_actions.length === 0 && (
+                <p className="proposal-empty">
+                  承認対象にできる根拠付きの対応案はありません。
+                </p>
+              )}
+              {agentResult && agentResult.proposed_actions.length > 0 && (
+                <div className="proposal-source">
+                  <label>
+                    <span>Agent提案</span>
+                    <select
+                      value={selectedActionIndex}
+                      onChange={(event) =>
+                        selectProposedAction(Number(event.target.value))
+                      }
+                      disabled={approval !== null}
+                    >
+                      {agentResult.proposed_actions.map((item, index) => (
+                        <option
+                          key={`${item.request_id}-${index}`}
+                          value={index}
+                        >
+                          {index + 1}. {item.request_id} / {item.assignee}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {selectedAction && (
+                    <div className="proposal-rationale">
+                      <span>提案理由</span>
+                      <p>{selectedAction.rationale}</p>
+                      <small>
+                        参照ルール:{" "}
+                        {selectedAction.rule_ids.length
+                          ? selectedAction.rule_ids.join(", ")
+                          : "なし"}
+                      </small>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="proposal-form">
-                <Field label="対象ID" value={proposal.request_id} onChange={(value) => setProposal({ ...proposal, request_id: value })} />
-                <Field label="担当者" value={proposal.assignee} onChange={(value) => setProposal({ ...proposal, assignee: value })} />
-                <Field label="期限" value={proposal.due_date} type="date" onChange={(value) => setProposal({ ...proposal, due_date: value })} />
+                <Field label="対象ID" value={proposal.request_id} onChange={(value) => setProposal({ ...proposal, request_id: value })} disabled={approval !== null} />
+                <Field label="担当者" value={proposal.assignee} onChange={(value) => setProposal({ ...proposal, assignee: value })} disabled={approval !== null} />
+                <Field label="期限" value={proposal.due_date} type="date" onChange={(value) => setProposal({ ...proposal, due_date: value })} disabled={approval !== null} />
                 <label><span>対応内容</span><textarea rows={4} value={proposal.action} onChange={(event) => setProposal({ ...proposal, action: event.target.value })} disabled={approval !== null} /></label>
               </div>
-              {!approval && <button className="outline-button" onClick={createApproval} disabled={busy !== null}>{busy === "approval" ? "作成中…" : "承認依頼を作成"}</button>}
+              {!approval && <button className="outline-button" onClick={createApproval} disabled={busy !== null || !proposalComplete}>{busy === "approval" ? "作成中…" : "承認依頼を作成"}</button>}
               {approval?.approval.status === "PENDING" && (
                 <div className="decision-row">
                   <button className="reject-button" onClick={() => decide("reject")} disabled={busy !== null}>却下</button>
@@ -274,8 +341,8 @@ function CategoryChart({ values }: { values: Record<string, number> }) {
   return <div className="bar-chart">{entries.map(([label, value]) => <div className="bar-row" key={label}><span>{label}</span><div><i style={{ width: `${Math.max(12, (value / max) * 100)}%` }} /></div><b>{value}</b></div>)}</div>;
 }
 
-function Field({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
-  return <label><span>{label}</span><input type={type} value={value} onChange={(event) => onChange(event.target.value)} /></label>;
+function Field({ label, value, onChange, type = "text", disabled = false }: { label: string; value: string; onChange: (value: string) => void; type?: string; disabled?: boolean }) {
+  return <label><span>{label}</span><input type={type} value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} /></label>;
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -304,4 +371,13 @@ async function readApi<T>(response: Response): Promise<T> {
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : "予期しないエラーが発生しました。";
+}
+
+function toTaskProposal(action: AgentProposedAction): TaskProposal {
+  return {
+    request_id: action.request_id,
+    assignee: action.assignee,
+    due_date: action.due_date,
+    action: action.action,
+  };
 }

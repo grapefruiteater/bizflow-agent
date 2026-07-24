@@ -111,6 +111,12 @@ function Assert-SmokeResponse {
     if (-not $Response.response -or -not ($Response.response -is [string])) {
         throw "Invocation response did not contain a non-empty string field named 'response'."
     }
+    if ([string]$Response.output_contract_version -ne "1.0") {
+        throw "Invocation response did not report output_contract_version=1.0."
+    }
+    if ($null -eq $Response.PSObject.Properties["proposed_actions"]) {
+        throw "Invocation response did not contain proposed_actions."
+    }
     if ([string]$Response.execution_mode -ne "READ_ONLY") {
         throw "Invocation response did not report execution_mode=READ_ONLY."
     }

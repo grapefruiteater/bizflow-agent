@@ -134,6 +134,14 @@ button:disabled { cursor: wait; opacity: .58; transform: none !important; }
 .agent-answer pre { margin: 0; padding: 15px; color: #334052; white-space: pre-wrap; font: 11px/1.75 Inter, "Noto Sans JP", sans-serif; }
 
 .approval-note { margin: -5px 0 17px; padding: 10px 11px; border-radius: 9px; color: #775a1b; background: #fff7e8; font-size: 10px; line-height: 1.6; }
+.proposal-empty { margin: 0 0 15px; padding: 12px; border: 1px dashed #cbd8d4; border-radius: 9px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.proposal-source { display: grid; gap: 10px; margin-bottom: 14px; }
+.proposal-source label { display: grid; gap: 7px; }
+.proposal-source label > span, .proposal-rationale > span { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .3px; }
+.proposal-source select { width: 100%; min-height: 38px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); font: inherit; }
+.proposal-rationale { padding: 11px 12px; border-radius: 9px; background: #eef7f4; }
+.proposal-rationale p { margin: 5px 0; color: var(--ink); font-size: 11px; line-height: 1.55; }
+.proposal-rationale small { color: var(--teal-dark); font-size: 9px; font-weight: 750; }
 .proposal-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .proposal-form label:last-child { grid-column: 1 / -1; }
 .outline-button { width: 100%; min-height: 42px; margin-top: 16px; color: var(--teal-dark); border: 1px solid #78c7b9; background: #f7fcfb; }

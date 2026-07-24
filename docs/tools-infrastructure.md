@@ -6,7 +6,7 @@
 
 S3、DynamoDB、読み取り／書き込みLambda、Gatewayは2026-07-22にAWSへdeploy済みで、環境別OutputsはGit管理対象外の`config/tools-outputs.json`へ保存されています。AgentCore Runtime Version 6にはGateway URLが設定され、`PROD` Endpointから4つの読み取りツールを利用できます。Gateway直接スモークテスト、Runtimeスモークテスト、CloudWatch Logsへの出力を確認済みです。
 
-Web BFFだけが呼び出す承認バックエンドLambdaもAWSへdeploy済みです。Outputsは9つとなり、`ApprovalWorkflowFunctionName`と`ApprovalWorkflowFunctionArn`が追加されています。承認要求・承認・DynamoDB監査履歴の実環境テストも完了しています。2026-07-24には、Next.js BFFからRead/Write Lambdaを直接呼び出す専用envelopeをTools Stackへ反映しました。Web FoundationはAWSへdeploy済みで、Web Serviceは未deployです。
+Web BFFだけが呼び出す承認バックエンドLambdaもAWSへdeploy済みです。Outputsは9つとなり、`ApprovalWorkflowFunctionName`と`ApprovalWorkflowFunctionArn`が追加されています。承認要求・承認・DynamoDB監査履歴の実環境テストも完了しています。2026-07-24には、Next.js BFFからRead/Write Lambdaを直接呼び出す専用envelopeをTools Stackへ反映し、Web Serviceから分析、承認、タスク登録、監査履歴までのAWS E2Eを確認しました。
 
 CDKアプリでは`enableTools`の既定値を`false`にしています。次を明示した場合だけTools Stackをsynth対象に追加します。
 
@@ -63,7 +63,7 @@ Tableのpartition keyは`pk`、sort keyは`sk`です。
 - 同じ承認・同じ内容を再送した場合は既存タスクを返す
 - 承認要求、承認／却下、登録、登録拒否を監査イベントへ記録する
 
-承認要求と承認／却下を操作するLambda backend、およびBFFからRead/Write Lambdaを直接呼び出す入力形式はAWSへ反映済みです。Web ServiceとCognito claims連携の実環境確認は今後の工程です。Gatewayへ定義する5ツールには承認状態を変更するツールを含めません。
+承認要求と承認／却下を操作するLambda backend、およびBFFからRead/Write Lambdaを直接呼び出す入力形式はAWSへ反映済みです。Web Serviceと検証済みCognito access tokenによるclaims連携も実環境で確認済みです。Gatewayへ定義する5ツールには承認状態を変更するツールを含めません。
 
 ## Lambda adapterの選択
 

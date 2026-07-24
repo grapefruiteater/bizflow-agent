@@ -4,7 +4,7 @@
 
 開いている `bizflow-agent` リポジトリをそのまま使用します。スクリプトは自身の配置場所からリポジトリルートを解決するため、絶対パスをソースコードへ埋め込みません。
 
-この文書の中心は既存AgentCore Runtimeのコンテナ公開です。ポートフォリオ用のS3、DynamoDB、Lambda、AgentCore Gateway、承認バックエンド、Code Interpreter、短期Memoryは2026-07-22にAWSへdeploy・検証済みです。2026-07-23にWeb Foundationもdeploy済みです。Next.js Web/BFFとWeb ServiceのCDKはローカル実装・検証済みですが、Fargate Serviceは未deployです。ツール基盤は [`tools-infrastructure.md`](tools-infrastructure.md)、Code Interpreterは [`code-interpreter.md`](code-interpreter.md)、Memoryは [`memory.md`](memory.md)、Webは [`web-application.md`](web-application.md)、全体の実装順序は [`portfolio-mvp.md`](portfolio-mvp.md) を参照してください。
+この文書の中心は既存AgentCore Runtimeのコンテナ公開です。ポートフォリオ用のS3、DynamoDB、Lambda、AgentCore Gateway、承認バックエンド、Code Interpreter、短期Memoryは2026-07-22にAWSへdeploy・検証済みです。Web FoundationとWeb Serviceもdeploy済みで、2026-07-24にCognitoログインから分析、承認、タスク登録、監査履歴までのAWS E2Eを確認しました。ツール基盤は [`tools-infrastructure.md`](tools-infrastructure.md)、Code Interpreterは [`code-interpreter.md`](code-interpreter.md)、Memoryは [`memory.md`](memory.md)、Webは [`web-application.md`](web-application.md)、全体の実装順序は [`portfolio-mvp.md`](portfolio-mvp.md) を参照してください。
 
 開発・デプロイ環境は次の構成です。
 
@@ -24,7 +24,7 @@
 
 ### 現在の状態
 
-CDKソースは `infra` に実装済みです。AgentCore Foundation、Runtime、サービス管理`DEFAULT`、明示昇格用`PROD` Endpoint、Tools、Memory、Web Foundationのデプロイは完了しています。`PROD`へのモデル応答もユーザーがAWSコンソールとスモークテストで確認済みです。採用モデルは `jp.amazon.nova-2-lite-v1:0` です。Web ServiceのCDKソースはローカル検証済みで、AWSへはまだdeployしていません。
+CDKソースは `infra` に実装済みです。AgentCore Foundation、Runtime、サービス管理`DEFAULT`、明示昇格用`PROD` Endpoint、Tools、Memory、Web Foundation、Web Serviceのデプロイは完了しています。`PROD`へのモデル応答とWebの承認フローもユーザーがAWS環境で確認済みです。採用モデルは `jp.amazon.nova-2-lite-v1:0` です。構造化提案と承認カード自動反映はローカル実装・検証済みで、次のRuntime/Web更新対象です。
 
 `config/cdk-outputs.json` はBizFlow専用スタックの実環境Outputsです。環境固有情報を含むためGit管理せず、Runtime Stackをdeployしたときだけ更新します。形式例は `config/agentcore.example.json` に保持します。
 
@@ -81,7 +81,7 @@ CDKソースは `infra` に実装済みです。AgentCore Foundation、Runtime�
 
 Web FoundationはWeb専用ECR、2 AZのVPC、ECS Cluster、Cognito、HTTPS ALB、Route 53 Alias、WAFを作成します。Web Serviceはpush済み`linux/arm64`イメージのdigest、Web Foundation Outputs、Runtime Outputs、Tools Outputsを読み、private subnetのFargate ServiceとCognito認証Listener Ruleを追加します。
 
-両Stackは既存AgentCore Foundation/Runtime/Tools/Memory StackとCloudFormationのcross-stack exportを作らず、設定ファイルの値を再利用します。ローカル実装・テスト・synthは完了し、Web FoundationはAWSへdeploy済みです。Web Serviceは未deployです。前提、費用、差分確認と段階的な反映順序は [`web-application.md`](web-application.md) を参照してください。
+両Stackは既存AgentCore Foundation/Runtime/Tools/Memory StackとCloudFormationのcross-stack exportを作らず、設定ファイルの値を再利用します。ローカル実装・テスト・synthとAWSへのdeploy、Cognitoログインから監査履歴までのE2Eを完了しています。前提、費用、差分確認と段階的な反映順序は [`web-application.md`](web-application.md) を参照してください。
 
 ### 初期構築の実行順序
 

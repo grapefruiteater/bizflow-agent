@@ -8,7 +8,7 @@ AWS基盤は、以前のアプリやCDKスタックで作成したリソース�
 
 ## 現在の状態
 
-2026-07-22時点では、AgentCore Runtime Version 6がAWSの`PROD` Endpointで稼働しています。RuntimeはAmazon Nova 2 Lite、AgentCore Gatewayの読み取りツール、AWS管理Code Interpreter、同一Runtime session内の短期Memoryを使用できます。通常呼び出し、Code Interpreter、Memoryの2ターン保存・再取得、読み取り専用応答契約を検証済みです。
+2026-07-24時点では、AgentCore Runtime Version 6がAWSの`PROD` Endpointで稼働しています。RuntimeはAmazon Nova 2 Lite、AgentCore Gatewayの読み取りツール、AWS管理Code Interpreter、同一Runtime session内の短期Memoryを使用できます。通常呼び出し、Code Interpreter、Memoryの2ターン保存・再取得、読み取り専用応答契約を検証済みです。Next.js Web/BFFもECS/Fargateへdeploy済みで、Cognitoログイン、分析、承認、タスク登録、監査履歴までのAWS E2Eを確認済みです。
 
 | 項目 | 状態 |
 |---|---|
@@ -23,9 +23,10 @@ AWS基盤は、以前のアプリやCDKスタックで作成したリソース�
 | 承認バックエンドLambda | AWSへdeploy・動作確認済み |
 | Code Interpreter | Runtime Version 6でも自動スモークテスト成功 |
 | AgentCore Memory | Runtime Version 6へ接続し、2ターンの保存・再取得を検証済み |
-| Next.js Web/BFF | ECS/Fargateへdeploy済み。ダッシュボードとAgent分析のAWS E2Eを検証済み |
+| Next.js Web/BFF | ECS/Fargateへdeploy済み。Cognitoログインから監査履歴までのAWS E2Eを検証済み |
 | Web Foundation | 2026-07-23にECR、VPC、Cognito、ALB、Route 53、WAF、ECS ClusterをAWSへdeploy・確認済み |
-| Web Service / ECS Fargate | AWSへdeploy済み。Cognitoグループ認可修正はローカル実装・検証済みで、次のWeb更新で反映予定 |
+| Web Service / ECS Fargate | AWSへdeploy済み。Cognitoグループ認可とRuntime/Lambda呼び出し権限を修正し、承認者E2Eを検証済み |
+| 構造化提案・承認カード連携 | Runtime/Webへローカル実装・検証済み。次のRuntime/Web更新でAWSへ反映予定 |
 
 現在の利用者向け動作は読み取り専用です。モデルは`get_business_requests`、`analyze_request_data`、`search_company_rules`、`get_task_status`を選択できますが、`create_business_task`はMCP allow-listとRuntime側の再フィルタの両方で除外しています。承認されていない書き込みをモデルの判断だけで実行することはありません。
 
@@ -39,7 +40,9 @@ AgentCore Runtimeが要求する次のHTTP Endpointを実装しています。
 - ポート：`8080`
 - コンテナ：`linux/arm64`
 
-`POST /invocations` はStrands AgentsとAmazon Bedrockモデルを使う、読み取り専用の業務分析へ接続されています。自由文に加え、構造化された問い合わせ一覧を受け取り、期限超過・緊急・24時間以内期限をPython側で決定的に判定できます。LLMはその判定結果と問い合わせIDを根拠に、要約と対応案を作成します。入力形式と判定規則は [`docs/business-analysis.md`](docs/business-analysis.md) を参照してください。
+`POST /invocations` はStrands AgentsとAmazon Bedrockモデルを使う、読み取り専用の業務分析へ接続されています。自由文に加え、構造化された問い合わせ一覧を受け取り、期限超過・緊急・24時間以内期限をPython側で決定的に判定できます。LLMはその判定結果と問い合わせIDを根拠に、要約と対応案を作成します。
+
+次回反映用ソースでは、文章の`response`に加えて`output_contract_version: "1.0"`と最大5件の`proposed_actions`を返します。各提案は問い合わせID、担当者、期限、対応内容、理由、参照ルールIDをPydanticで検証します。Web BFFはこの契約を再検証し、正常な提案だけを承認カードへ自動反映します。候補が複数ある場合は選択でき、提案がない場合は固定の初期値を表示しません。入力形式と判定規則は [`docs/business-analysis.md`](docs/business-analysis.md) を参照してください。
 
 Runtime環境変数`BIZFLOW_GATEWAY_URL`は`config/tools-outputs.json`から公開スクリプトが設定し、ソースへ固定しません。Gateway未設定時は呼び出し元が渡した情報だけを分析するモードへ戻せます。タスク登録、データ更新、承認、外部送信はRuntimeから実行しません。
 
@@ -66,6 +69,7 @@ bizflow-agent/
 │   ├── __init__.py
 │   └── bizflow/
 │       ├── __init__.py
+│       ├── analysis_output.py
 │       ├── app.py
 │       ├── bizflow_agent.py
 │       ├── business_data.py
@@ -125,6 +129,7 @@ bizflow-agent/
 │   │   ├── __init__.py
 │   │   └── test_lambda_function.py
 │   ├── runtime/
+│   │   ├── test_analysis_output.py
 │   │   ├── test_bizflow_agent.py
 │   │   ├── test_business_data.py
 │   │   ├── test_code_interpreter_tools.py
@@ -152,8 +157,9 @@ bizflow-agent/
 |---|---|
 | `agents/__init__.py` | `agents` をPythonパッケージとして扱うための初期化ファイルです。 |
 | `agents/bizflow/__init__.py` | BizFlow Runtimeパッケージの初期化ファイルです。 |
-| `agents/bizflow/app.py` | FastAPIによるAgentCore HTTP Runtimeです。`/ping`、`/invocations`、自由文・構造化業務データの入力検証、Runtime session IDヘッダーの受け渡し、内部エラーのマスキングを実装しています。 |
-| `agents/bizflow/bizflow_agent.py` | Strands Agent、Bedrockモデル設定、読み取り専用システムプロンプトを実装します。Gateway設定時だけ4つの読み取りツールを公開し、書き込みツールを除外します。ローカルコンテナ検証専用の決定的な`local-test` providerも含みます。 |
+| `agents/bizflow/analysis_output.py` | Agent分析結果と承認候補のPydantic契約です。件数、長さ、日付、ルールID、問い合わせIDの重複を検証します。 |
+| `agents/bizflow/app.py` | FastAPIによるAgentCore HTTP Runtimeです。`/ping`、`/invocations`、自由文・構造化業務データの入力検証、構造化提案の応答契約、Runtime session IDヘッダーの受け渡し、内部エラーのマスキングを実装しています。 |
+| `agents/bizflow/bizflow_agent.py` | Strands Agent、Bedrockモデル設定、読み取り専用システムプロンプト、`AgentAnalysis`構造化出力を実装します。Gateway設定時だけ4つの読み取りツールを公開し、書き込みツールを除外します。ローカルコンテナ検証専用の決定的な`local-test` providerも含みます。 |
 | `agents/bizflow/business_data.py` | 問い合わせスナップショットを検証し、期限超過・緊急・24時間以内期限を`as_of`基準で決定的に計算します。計算結果と根拠データをLLM向けコンテキストへ変換します。 |
 | `agents/bizflow/code_interpreter_tools.py` | AWS管理のCode Interpreterを1回の分析ごとに開始・停止し、ビジネスデータのPython集計・検算だけをStrandsツールとして公開します。入力・出力長、resource ID、エラー情報を制限します。 |
 | `agents/bizflow/conversation_memory.py` | AgentCore短期Memoryから最大5ターンを取得し、同じRuntime session IDへ利用者依頼と応答を保存します。本文の自己申告IDは使用せず、履歴・保存サイズとエラー情報を制限します。 |
@@ -208,14 +214,14 @@ bizflow-agent/
 
 | ファイル | 説明 |
 |---|---|
-| `web/src/app/page.tsx` / `components/workspace.tsx` | 問い合わせダッシュボード、Agentチャット、推奨アクション、承認・却下、承認後タスク登録を表示します。 |
+| `web/src/app/page.tsx` / `components/workspace.tsx` | 問い合わせダッシュボード、Agentチャット、構造化された推奨アクションの選択・承認カード自動反映、承認・却下、承認後タスク登録を表示します。 |
 | `web/src/app/history/page.tsx` / `components/history-view.tsx` | 承認IDから承認内容、承認者、作成タスク、監査イベントを確認する履歴画面です。 |
 | `web/src/app/api/` | dashboard、AgentCore Runtime、承認、タスク登録、履歴、ヘルスチェックのBFF API Routesです。 |
 | `web/src/lib/auth.ts` | ALB/Cognito identity、承認者グループ、CSRF header、actor単位Runtime session IDを検証します。 |
-| `web/src/lib/backend.ts` | AgentCore Runtimeと3つのLambdaをAWS SDKで呼び出し、承認済み提案だけを書き込み経路へ渡します。 |
+| `web/src/lib/backend.ts` / `contracts.ts` / `validation.ts` | AgentCore Runtimeと3つのLambdaをAWS SDKで呼び出し、Runtimeの構造化応答をBFF境界で検証して、承認済み提案だけを書き込み経路へ渡します。 |
 | `web/src/lib/demo-backend.ts` / `demo-data.ts` | AWSへ接続せず、架空データとメモリ内承認フローを動かすローカルデモbackendです。 |
 | `web/Dockerfile` / `.dockerignore` | Next.js standalone出力を非rootユーザーで起動するFargate向けARM64対応イメージです。 |
-| `web/tests/` | 認証境界、session分離、未承認拒否、承認後登録、冪等性をVitestで検証します。 |
+| `web/tests/` | 認証境界、session分離、構造化応答、不正な書き込み主張の拒否、承認カード反映、未承認拒否、承認後登録、冪等性をVitestで検証します。 |
 
 ### CDK基盤
 
@@ -258,7 +264,8 @@ bizflow-agent/
 
 | ファイル | 説明 |
 |---|---|
-| `tests/runtime/test_endpoints.py` | `/ping`、`/invocations`、構造化データ、入力エラー、session ID、内部エラー応答をAWS接続なしで検証するpytestです。 |
+| `tests/runtime/test_analysis_output.py` | 構造化提案の直列化、重複ID、余分な項目、不正なルールIDの拒否を検証します。 |
+| `tests/runtime/test_endpoints.py` | `/ping`、`/invocations`、構造化データと提案、入力エラー、session ID、内部エラー応答をAWS接続なしで検証するpytestです。 |
 | `tests/runtime/test_bizflow_agent.py` | Runtime設定、ローカルテストprovider、依存注入した分析処理、空応答の拒否をAWS接続なしで検証するpytestです。 |
 | `tests/runtime/test_gateway_tools.py` | Gateway URL制限、SigV4署名、読み取りツールallow-listと書き込みツール除外をAWS接続なしで検証します。 |
 | `tests/runtime/test_business_data.py` | 期限超過などの業務判定と、タイムゾーン、重複ID、日時前後関係の境界条件を検証するpytestです。 |

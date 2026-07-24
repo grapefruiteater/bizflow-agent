@@ -4,7 +4,7 @@
 
 承認要求、承認、却下、承認状態取得を扱うLambdaをAWSへdeploy済みです。承認要求、状態確認、承認、DynamoDBの承認本体と監査イベントが正常に記録されることを確認しています。
 
-このLambdaはAgentCore Gateway targetへ登録しません。LLMへ承認権限を与えず、Next.js BFFがCognitoで確認した利用者情報を`actor`として渡し、IAMでこの関数だけを呼び出します。Web/BFFとWeb用CDKはローカル実装・検証済みで、Web FoundationはAWSへdeploy済み、Web Serviceは未deployです。
+このLambdaはAgentCore Gateway targetへ登録しません。LLMへ承認権限を与えず、Next.js BFFがCognitoで確認した利用者情報を`actor`として渡し、IAMでこの関数だけを呼び出します。Web FoundationとWeb ServiceはAWSへdeploy済みで、Cognito承認者による承認、タスク登録、監査履歴のE2Eを確認済みです。
 
 ## Lambda操作契約
 

@@ -5,6 +5,7 @@ import strands
 import strands.models
 
 import agents.bizflow.bizflow_agent as bizflow_agent_module
+from agents.bizflow.analysis_output import AgentAnalysis, ProposedAction
 from agents.bizflow.bizflow_agent import (
     AgentConfigurationError,
     AgentSettings,
@@ -122,6 +123,7 @@ def test_strands_agent_exposes_code_interpreter_only_when_enabled(
     agent_options = captured["agent"]
     assert isinstance(agent_options, dict)
     assert agent_options["tools"] == [code_tool]
+    assert agent_options["structured_output_model"] is AgentAnalysis
     assert "AgentCore Code Interpreter" in agent_options["system_prompt"]
 
 
@@ -149,9 +151,10 @@ def test_local_test_provider_does_not_require_model_or_aws() -> None:
     )
     analyzer = BizFlowAnalyzer(settings_factory=lambda: settings)
 
-    assert analyzer.analyze("test prompt") == (
-        "Local read-only analysis completed: test prompt"
-    )
+    result = analyzer.analyze("test prompt")
+
+    assert result.response == "Local read-only analysis completed: test prompt"
+    assert result.proposed_actions[0].request_id == "REQ-LOCAL"
 
 
 def test_analyzer_uses_injected_agent_without_aws_access() -> None:
@@ -162,9 +165,27 @@ def test_analyzer_uses_injected_agent_without_aws_access() -> None:
     )
 
     class FakeAgent:
-        def __call__(self, prompt: str) -> str:
+        def __call__(self, prompt: str):
             captured["prompt"] = prompt
-            return "read-only analysis"
+            return type(
+                "FakeResult",
+                (),
+                {
+                    "structured_output": AgentAnalysis(
+                        response="read-only analysis",
+                        proposed_actions=[
+                            ProposedAction(
+                                request_id="REQ-002",
+                                assignee="support-lead",
+                                due_date="2026-07-14",
+                                action="顧客へ一次回答する",
+                                rationale="期限超過かつ緊急度highのため",
+                                rule_ids=["RULE-001"],
+                            )
+                        ],
+                    )
+                },
+            )()
 
     def fake_agent_factory(received_settings: AgentSettings) -> FakeAgent:
         captured["settings"] = received_settings
@@ -175,20 +196,23 @@ def test_analyzer_uses_injected_agent_without_aws_access() -> None:
         agent_factory=fake_agent_factory,
     )
 
-    assert analyzer.analyze("analyze this request") == "read-only analysis"
+    analysis = analyzer.analyze("analyze this request")
+
+    assert analysis.response == "read-only analysis"
+    assert analysis.proposed_actions[0].request_id == "REQ-002"
     assert captured == {
         "settings": settings,
         "prompt": "analyze this request",
     }
 
 
-def test_analyzer_rejects_empty_model_response() -> None:
+def test_analyzer_rejects_invalid_structured_model_response() -> None:
     analyzer = BizFlowAnalyzer(
         settings_factory=lambda: AgentSettings(model_id="example.model-v1:0"),
         agent_factory=lambda _settings: lambda _prompt: "   ",
     )
 
-    with pytest.raises(RuntimeError, match="empty response"):
+    with pytest.raises(RuntimeError, match="invalid structured response"):
         analyzer.analyze("analyze this request")
 
 

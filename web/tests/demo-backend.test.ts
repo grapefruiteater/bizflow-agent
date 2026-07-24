@@ -4,6 +4,7 @@ import {
   executeDemoTask,
   getDemoApproval,
   getDemoDashboard,
+  invokeDemoAgent,
   requestDemoApproval,
   resetDemoState,
 } from "@/lib/demo-backend";
@@ -28,6 +29,18 @@ describe("local portfolio workflow", () => {
       registeredTasks: 0,
     });
     expect(dashboard.categoryCounts["障害"]).toBe(2);
+  });
+
+  it("returns structured proposals that can populate the approval card", () => {
+    const result = invokeDemoAgent("今週の問い合わせを分析してください。");
+
+    expect(result.output_contract_version).toBe("1.0");
+    expect(result.proposed_actions[0]).toMatchObject({
+      request_id: "REQ-002",
+      assignee: "support-lead",
+      due_date: "2026-07-14",
+    });
+    expect(result.write_operations_performed).toBe(false);
   });
 
   it("refuses task registration before approval", () => {

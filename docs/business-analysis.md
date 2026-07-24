@@ -2,9 +2,9 @@
 
 ## 目的と現在の範囲
 
-BizFlow Agentは、呼び出し元が`POST /invocations`へ渡した問い合わせ一覧を読み取り専用で分析します。Runtimeは期限超過などの事実判定をPythonで決定的に計算し、その結果を根拠としてLLMが日本語の要約と提案を作成します。
+BizFlow Agentは、呼び出し元が`POST /invocations`へ渡した問い合わせ一覧、または読み取り専用Gatewayツールで取得した問い合わせを分析します。Runtimeは期限超過などの事実判定をPythonで決定的に計算し、その結果を根拠としてLLMが日本語の要約と構造化された対応案を作成します。
 
-現時点ではDynamoDB、S3、CRMなどからデータを取得せず、入力データの更新、タスク登録、承認、外部送信も行いません。会話履歴も保持しません。
+Runtimeからの入力データ更新、タスク登録、承認、外部送信は行いません。Gateway経由で公開するのは読み取りツールだけで、会話履歴は同じAgentCore Runtime session内の短期Memoryに限定します。
 
 ## リクエスト例
 
@@ -75,6 +75,17 @@ BizFlow Agentは、呼び出し元が`POST /invocations`へ渡した問い合わ
 ```json
 {
   "response": "要約: INQ-001を最優先で確認してください。...",
+  "output_contract_version": "1.0",
+  "proposed_actions": [
+    {
+      "request_id": "INQ-001",
+      "assignee": "support-lead",
+      "due_date": "2026-07-21",
+      "action": "チームリーダーへエスカレーションし、顧客へ一次回答する",
+      "rationale": "期限超過かつ緊急案件のため",
+      "rule_ids": ["RULE-002"]
+    }
+  ],
   "status": "success",
   "execution_mode": "READ_ONLY",
   "write_operations_performed": false,
@@ -89,7 +100,9 @@ BizFlow Agentは、呼び出し元が`POST /invocations`へ渡した問い合わ
 }
 ```
 
-`analysis_context`はRuntimeが計算した機械判定であり、`response`はそのコンテキストを使ったLLMの文章です。呼び出し側は重要な業務分岐にLLM文章ではなく`analysis_context`を利用できます。
+`analysis_context`はRuntimeが計算した機械判定であり、`response`はそのコンテキストを使ったLLMの文章です。`proposed_actions`は承認カード用の未承認候補で、最大5件です。各候補には`request_id`、`assignee`、`due_date`、`action`、`rationale`が必須で、`rule_ids`には実際に検索できた`RULE-xxx`だけを含めます。対応不要または根拠不足なら空配列です。
+
+RuntimeはStrandsの構造化出力をPydanticで検証し、Web BFFも同じ境界をTypeScriptで再検証します。`status`が`success`以外、`execution_mode`が`READ_ONLY`以外、`write_operations_performed`が`false`以外、不正な日付・ルールID・余分な項目を含む応答は承認カードへ渡しません。重要な業務分岐にはLLM文章ではなく、`analysis_context`と検証済み`proposed_actions`を利用します。
 
 ## ローカル検証
 

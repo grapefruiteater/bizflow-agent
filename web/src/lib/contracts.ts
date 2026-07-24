@@ -27,9 +27,11 @@ export interface DashboardData {
 
 export interface AgentResult {
   response: string;
-  status: string;
-  execution_mode?: string;
-  write_operations_performed?: boolean;
+  output_contract_version: "1.0";
+  proposed_actions: AgentProposedAction[];
+  status: "success";
+  execution_mode: "READ_ONLY";
+  write_operations_performed: false;
   memory?: {
     enabled?: boolean;
     context_turns?: number;
@@ -43,6 +45,11 @@ export interface TaskProposal {
   assignee: string;
   due_date: string;
   action: string;
+}
+
+export interface AgentProposedAction extends TaskProposal {
+  rationale: string;
+  rule_ids: string[];
 }
 
 export interface Approval {

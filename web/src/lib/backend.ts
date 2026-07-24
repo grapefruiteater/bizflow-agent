@@ -21,6 +21,10 @@ import {
 } from "@/lib/demo-backend";
 import { AppError } from "@/lib/errors";
 import { isLocalDemo } from "@/lib/auth";
+import {
+  addAnalysisScope,
+  analysisScopeFromEnvironment,
+} from "@/lib/analysis-scope";
 
 const region = process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION ?? "ap-northeast-1";
 const lambdaClient = new LambdaClient({ region });
@@ -88,7 +92,9 @@ export async function invokeAgent(
       qualifier: process.env.BIZFLOW_AGENT_ENDPOINT_NAME ?? "PROD",
       contentType: "application/json",
       accept: "application/json",
-      payload: JSON.stringify({ prompt }),
+      payload: JSON.stringify({
+        prompt: addAnalysisScope(prompt, analysisScopeFromEnvironment()),
+      }),
     }),
   );
   const text = await response.response?.transformToString();

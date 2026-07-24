@@ -1,4 +1,5 @@
 import {
+  ArnFormat,
   CfnOutput,
   Duration,
   RemovalPolicy,
@@ -17,6 +18,7 @@ import { Construct } from "constructs";
 
 export interface BizFlowWebServiceStackProps extends StackProps {
   readonly agentRuntimeArn: string;
+  readonly agentRuntimeEndpointArn: string;
   readonly approvalFunctionName: string;
   readonly availabilityZones: string[];
   readonly clusterName: string;
@@ -74,7 +76,7 @@ export class BizFlowWebServiceStack extends Stack {
     const logGroup = new logs.LogGroup(this, "WebLogGroup", {
       logGroupName: `/ecs/bizflow-web-${props.environmentName}`,
       retention: logs.RetentionDays.ONE_MONTH,
-      removalPolicy: RemovalPolicy.RETAIN,
+      removalPolicy: RemovalPolicy.RETAIN_ON_UPDATE_OR_DELETE,
     });
     const taskDefinition = new ecs.FargateTaskDefinition(this, "WebTaskDefinition", {
       family: `bizflow-web-${props.environmentName}`,
@@ -85,27 +87,46 @@ export class BizFlowWebServiceStack extends Stack {
         operatingSystemFamily: ecs.OperatingSystemFamily.LINUX,
       },
     });
+    // GuardDuty Runtime Monitoring injects its agent from an AWS-managed,
+    // cross-account ECR repository. The repository-specific pull grant added
+    // for the Web image does not cover that agent image.
+    taskDefinition.obtainExecutionRole().addToPrincipalPolicy(
+      new iam.PolicyStatement({
+        sid: "PullGuardDutyRuntimeMonitoringAgent",
+        actions: [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+        ],
+        resources: ["*"],
+      }),
+    );
     taskDefinition.taskRole.addToPrincipalPolicy(
       new iam.PolicyStatement({
         sid: "InvokeBizFlowAgentRuntime",
         actions: ["bedrock-agentcore:InvokeAgentRuntime"],
-        resources: [props.agentRuntimeArn],
+        // AgentCore performs hierarchical authorization for both resources
+        // when a qualifier targets a named Runtime endpoint.
+        resources: [props.agentRuntimeArn, props.agentRuntimeEndpointArn],
       }),
     );
     const readToolsFunctionArn = this.formatArn({
       service: "lambda",
       resource: "function",
       resourceName: props.readToolsFunctionName,
+      arnFormat: ArnFormat.COLON_RESOURCE_NAME,
     });
     const writeToolsFunctionArn = this.formatArn({
       service: "lambda",
       resource: "function",
       resourceName: props.writeToolsFunctionName,
+      arnFormat: ArnFormat.COLON_RESOURCE_NAME,
     });
     const approvalFunctionArn = this.formatArn({
       service: "lambda",
       resource: "function",
       resourceName: props.approvalFunctionName,
+      arnFormat: ArnFormat.COLON_RESOURCE_NAME,
     });
     taskDefinition.taskRole.addToPrincipalPolicy(
       new iam.PolicyStatement({
@@ -129,6 +150,11 @@ export class BizFlowWebServiceStack extends Stack {
         streamPrefix: "web",
       }),
       environment: {
+        // ECS assigns a task hostname at runtime. Next.js standalone reads the
+        // HOSTNAME environment variable as its bind address, so force all
+        // interfaces to keep both the loopback and ALB health checks reachable.
+        HOSTNAME: "0.0.0.0",
+        PORT: "3000",
         AWS_REGION: this.region,
         BIZFLOW_LOCAL_DEMO: "false",
         BIZFLOW_AGENT_RUNTIME_ARN: props.agentRuntimeArn,

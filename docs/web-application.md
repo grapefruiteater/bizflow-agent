@@ -38,8 +38,19 @@ Browser
 - Cognito認証後だけforwardするHTTPS Listener Rule
 - CPU使用率による1から3タスクのAuto Scaling
 - 30日保持のCloudWatch Logs
+- GuardDuty Runtime Monitoringが注入するAWS管理サイドカーを取得するための、読み取り専用ECR権限をTask Execution Roleへ付与
 
 FoundationとServiceを分けるため、空のECRしかない段階でECS Serviceを作りません。Foundationを一度作成し、WebイメージをECRへpushしてdigestを取得してからServiceを追加します。通常のWeb更新ではFoundationをdeployしません。
+
+GuardDutyの自動エージェント設定が有効なアカウントでは、Fargate起動時に別AWSアカウントのECRからRuntime Monitoringサイドカーが注入されます。Webイメージ用リポジトリだけに限定したpull権限ではこのサイドカーを取得できないため、Task Execution Roleには`ecr:BatchCheckLayerAvailability`、`ecr:GetDownloadUrlForLayer`、`ecr:BatchGetImage`を読み取り専用で許可します。アプリケーション用Task RoleのAgentCore/Lambda権限とは分離しています。
+
+Next.js standalone serverは`HOSTNAME`を待受アドレスとして使用します。ECS実行時のタスクhostnameを待受アドレスにすると`127.0.0.1`のコンテナヘルスチェックへ応答できないため、Task Definitionで`HOSTNAME=0.0.0.0`と`PORT=3000`を明示します。これによりコンテナ内部のloopbackチェックとALBからのチェックの両方へ応答します。
+
+Web Task Roleから3つの業務Lambdaを直接呼び出すIAM Resourceには、Lambda関数ARNの`function:関数名`形式を使用します。`function/関数名`では実際のLambda ARNと一致せず、`lambda:InvokeFunction`が`AccessDeniedException`になるため、CDKのARN形式を明示して回帰テストで固定しています。
+
+`PROD` qualifierを指定するAgentCore呼び出しでは、Task RoleへRuntime ARNだけでなく`AgentRuntimeEndpointArn`も許可します。AgentCoreはRuntimeと指定Endpointの両方を階層的に認可するため、Endpoint ARNはRuntime Stack Outputsから取得し、ソースへ埋め込みません。
+
+「今週」のような相対日付をモデルへ推測させないため、Web BFFは`BIZFLOW_DATA_START_DATE`、`BIZFLOW_DATA_END_DATE`、`BIZFLOW_ANALYSIS_AS_OF`をAgent向けプロンプトへ固定コンテキストとして付加します。ダッシュボードとAgentは同じ期間を参照し、日付設定が`YYYY-MM-DD`でなければモデルを呼ばずにエラーとします。
 
 ## Web画面
 
@@ -47,7 +58,7 @@ FoundationとServiceを分けるため、空のECRしかない段階でECS Servi
 - `/history`: 承認IDを指定した承認内容と監査イベントの確認
 - `/api/health`: ALB/ECSのヘルスチェック
 - `/api/dashboard`: 架空問い合わせの取得と決定的集計
-- `/api/agent`: AgentCore Runtimeの`PROD` Endpoint呼び出し
+- `/api/agent`: ダッシュボードと同じ固定分析期間を付加したAgentCore Runtimeの`PROD` Endpoint呼び出し
 - `/api/approvals`: 承認要求
 - `/api/approvals/{approvalId}`: 承認状態と監査履歴
 - `/api/approvals/{approvalId}/decision`: 承認または却下

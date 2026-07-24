@@ -31,6 +31,8 @@ function template(): Template {
     webUrl: "https://bizflow.example.com",
     agentRuntimeArn:
       "arn:aws:bedrock-agentcore:ap-northeast-1:111122223333:runtime/BizFlowAgent_dev-example",
+    agentRuntimeEndpointArn:
+      "arn:aws:bedrock-agentcore:ap-northeast-1:111122223333:runtime/BizFlowAgent_dev-example/runtime-endpoint/PROD",
     endpointName: "PROD",
     readToolsFunctionName: "bizflow-read-tools-dev",
     writeToolsFunctionName: "bizflow-write-tools-dev",
@@ -56,6 +58,10 @@ describe("BizFlowWebServiceStack", () => {
           Image: Match.anyValue(),
           PortMappings: Match.arrayWith([Match.objectLike({ ContainerPort: 3000 })]),
           ReadonlyRootFilesystem: true,
+          Environment: Match.arrayWith([
+            { Name: "HOSTNAME", Value: "0.0.0.0" },
+            { Name: "PORT", Value: "3000" },
+          ]),
         }),
       ]),
     });
@@ -70,7 +76,7 @@ describe("BizFlowWebServiceStack", () => {
     expect(JSON.stringify(taskDefinitions)).toContain(DIGEST);
   });
 
-  it("grants only AgentCore invocation and the three BFF Lambda APIs", () => {
+  it("limits the task role to AgentCore invocation and the three BFF Lambda APIs", () => {
     const result = template();
 
     result.hasResourceProperties("AWS::IAM::Policy", {
@@ -80,6 +86,10 @@ describe("BizFlowWebServiceStack", () => {
             Sid: "InvokeBizFlowAgentRuntime",
             Action: "bedrock-agentcore:InvokeAgentRuntime",
             Effect: "Allow",
+            Resource: Match.arrayWith([
+              "arn:aws:bedrock-agentcore:ap-northeast-1:111122223333:runtime/BizFlowAgent_dev-example",
+              "arn:aws:bedrock-agentcore:ap-northeast-1:111122223333:runtime/BizFlowAgent_dev-example/runtime-endpoint/PROD",
+            ]),
           }),
           Match.objectLike({
             Sid: "InvokeBizFlowBusinessApis",
@@ -95,6 +105,40 @@ describe("BizFlowWebServiceStack", () => {
     expect(serialized).toContain("bizflow-read-tools-dev");
     expect(serialized).toContain("bizflow-write-tools-dev");
     expect(serialized).toContain("bizflow-approval-workflow-dev");
+    expect(serialized).toContain(":function:bizflow-read-tools-dev");
+    expect(serialized).toContain(":function:bizflow-write-tools-dev");
+    expect(serialized).toContain(":function:bizflow-approval-workflow-dev");
+    expect(serialized).not.toContain(":function/bizflow-");
+  });
+
+  it("allows the execution role to pull the injected GuardDuty agent image", () => {
+    const result = template();
+
+    result.hasResourceProperties("AWS::IAM::Policy", {
+      PolicyDocument: {
+        Statement: Match.arrayWith([
+          Match.objectLike({
+            Sid: "PullGuardDutyRuntimeMonitoringAgent",
+            Action: Match.arrayWith([
+              "ecr:BatchCheckLayerAvailability",
+              "ecr:GetDownloadUrlForLayer",
+              "ecr:BatchGetImage",
+            ]),
+            Effect: "Allow",
+            Resource: "*",
+          }),
+        ]),
+      },
+    });
+  });
+
+  it("retains logs after normal deletion but cleans them up after a failed initial create", () => {
+    const result = template();
+
+    result.hasResource("AWS::Logs::LogGroup", {
+      DeletionPolicy: "RetainExceptOnCreate",
+      UpdateReplacePolicy: "Retain",
+    });
   });
 
   it("places Cognito authentication before the target group forward action", () => {

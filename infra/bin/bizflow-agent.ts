@@ -175,6 +175,10 @@ if (enableWebService) {
       userPoolDomainName: readOutput(webOutputs, "WebUserPoolDomainName"),
       webUrl: readOutput(webOutputs, "WebUrl"),
       agentRuntimeArn: readOutput(runtimeOutputs, "AgentRuntimeArn"),
+      agentRuntimeEndpointArn: readOutput(
+        runtimeOutputs,
+        "AgentRuntimeEndpointArn",
+      ),
       endpointName: readOutput(runtimeOutputs, "AgentRuntimeEndpointName"),
       readToolsFunctionName: readLambdaFunctionName(
         toolsOutputs,

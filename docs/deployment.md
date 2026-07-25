@@ -4,7 +4,7 @@
 
 開いている `bizflow-agent` リポジトリをそのまま使用します。スクリプトは自身の配置場所からリポジトリルートを解決するため、絶対パスをソースコードへ埋め込みません。
 
-この文書の中心は既存AgentCore Runtimeのコンテナ公開です。ポートフォリオ用のS3、DynamoDB、Lambda、AgentCore Gateway、承認バックエンド、Code Interpreter、短期・利用者別長期MemoryはAWSへdeploy・検証済みです。Web FoundationとWeb Serviceもdeploy済みで、2026-07-25にCognitoログインから長期設定取得、構造化提案、承認、タスク登録、監査履歴までのAWS E2Eを確認しました。次のAWS更新対象はGateway Write target廃止の第1段階です。ツール基盤は [`tools-infrastructure.md`](tools-infrastructure.md)、Code Interpreterは [`code-interpreter.md`](code-interpreter.md)、Memoryは [`memory.md`](memory.md)、Webは [`web-application.md`](web-application.md)、全体の実装順序は [`portfolio-mvp.md`](portfolio-mvp.md) を参照してください。
+この文書の中心は既存AgentCore Runtimeのコンテナ公開です。ポートフォリオ用のS3、DynamoDB、Lambda、AgentCore Gateway、承認バックエンド、Code Interpreter、短期・利用者別長期MemoryはAWSへdeploy・検証済みです。Web FoundationとWeb Serviceもdeploy済みで、2026-07-25にCognitoログインから長期設定取得、構造化提案、承認、タスク登録、監査履歴までのAWS E2Eを確認しました。Gateway Write target廃止の第1段階はAWSへ反映済みで、第2段階のtarget削除はローカル実装済み・AWS反映前です。ツール基盤は [`tools-infrastructure.md`](tools-infrastructure.md)、Code Interpreterは [`code-interpreter.md`](code-interpreter.md)、Memoryは [`memory.md`](memory.md)、Webは [`web-application.md`](web-application.md)、全体の実装順序は [`portfolio-mvp.md`](portfolio-mvp.md) を参照してください。
 
 開発・デプロイ環境は次の構成です。
 
@@ -63,7 +63,7 @@ CDKソースは `infra` に実装済みです。AgentCore Foundation、Runtime�
 - 合成CSVと社内ルールを格納するS3 Bucket
 - 承認、タスク、監査履歴を格納するDynamoDB Table
 - IAMと許可ツールを分けたRead LambdaとWrite Lambda
-- IAM認証のAgentCore Gatewayと2つのLambda target
+- IAM認証のAgentCore Gatewayと読み取り専用Lambda target（Write LambdaはWeb/BFF専用）
 - 既存Runtime実行ロールから対象Gatewayだけを呼び出すIAM Policy
 
 `enableTools=true`の場合だけCDKアプリへ追加されます。既存RuntimeロールARNは既定で`config/cdk-outputs.json`から自動取得し、既存ロールをimportします。Tools StackからFoundation Stackへのcross-stack参照やdeploy依存はありません。このStackのAWS反映手順と検証項目は [`tools-infrastructure.md`](tools-infrastructure.md) に分離しています。
@@ -76,7 +76,7 @@ CDKソースは `infra` に実装済みです。AgentCore Foundation、Runtime�
 - 既存Runtimeロールへ対象Memoryの`CreateEvent`、`ListEvents`とnamespace限定`RetrieveMemoryRecords`を許可するIAM Policy
 - Runtime公開用のMemory ID、ARN、strategy、namespace Outputs
 
-`enableMemory=true`の場合だけCDKアプリへ追加されます。既存RuntimeロールをOutputs由来のARNでimportし、FoundationやTools Stackへのcross-stack参照を作りません。長期Memory追加分はまだAWS反映前です。詳細は [`memory.md`](memory.md) を参照してください。
+`enableMemory=true`の場合だけCDKアプリへ追加されます。既存RuntimeロールをOutputs由来のARNでimportし、FoundationやTools Stackへのcross-stack参照を作りません。長期Memory追加分もRuntime Version 8でAWSへ反映・E2E確認済みです。詳細は [`memory.md`](memory.md) を参照してください。
 
 #### `BizFlowWebFoundationStack` / `BizFlowWebServiceStack`（明示指定時のみ）
 
@@ -387,7 +387,7 @@ python -m pip install --requirement .\agents\bizflow\requirements-dev.txt
 python -m pytest .\tests
 ```
 
-このテストはAWSへ接続しません。RuntimeのHTTP契約と分析に加え、5ツール、fake S3/DynamoDB adapter、未承認拒否、承認後改変拒否、冪等性も検証します。入力契約は [`business-analysis.md`](business-analysis.md) を参照してください。
+このテストはAWSへ接続しません。RuntimeのHTTP契約と分析に加え、4つのGateway読み取りツール、BFF専用タスク登録、fake S3/DynamoDB adapter、未承認拒否、承認後改変拒否、冪等性も検証します。入力契約は [`business-analysis.md`](business-analysis.md) を参照してください。
 
 ## コンテナのローカル検証
 

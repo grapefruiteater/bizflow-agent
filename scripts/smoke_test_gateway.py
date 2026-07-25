@@ -17,9 +17,10 @@ if str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
 
 from agents.bizflow.gateway_tools import (  # noqa: E402
-    ALL_BUSINESS_TOOL_NAMES,
+    READ_ONLY_BUSINESS_TOOL_NAMES,
+    SigV4HttpAuth,
     business_tool_name,
-    create_gateway_mcp_client,
+    validate_gateway_url,
 )
 
 
@@ -79,26 +80,6 @@ def invoke_tool(client: Any, actual_name: str, arguments: dict[str, Any]) -> dic
     return require_success_payload(result, business_tool_name(actual_name))
 
 
-def invoke_tool_expect_error(
-    client: Any,
-    actual_name: str,
-    arguments: dict[str, Any],
-    expected_code: str,
-) -> None:
-    result = client.call_tool_sync(
-        tool_use_id=str(uuid.uuid4()),
-        name=actual_name,
-        arguments=arguments,
-    )
-    payload = extract_json_payload(result, business_tool_name(actual_name))
-    error = payload.get("error")
-    actual_code = error.get("code") if isinstance(error, Mapping) else None
-    if payload.get("ok") is not False or actual_code != expected_code:
-        raise RuntimeError(
-            f"Gateway write boundary returned {payload}; expected {expected_code}."
-        )
-
-
 def main() -> int:
     args = parse_args()
 
@@ -111,23 +92,32 @@ def main() -> int:
     if ROOT_ARN_PATTERN.fullmatch(caller_arn):
         raise RuntimeError("Smoke testing as the AWS account root user is prohibited.")
 
-    client = create_gateway_mcp_client(
-        args.gateway_url,
-        args.region,
-        credentials_provider=session.get_credentials,
-        allowed_tool_names=ALL_BUSINESS_TOOL_NAMES,
+    from mcp.client.streamable_http import streamablehttp_client
+    from strands.tools.mcp import MCPClient
+
+    gateway_url = validate_gateway_url(args.gateway_url, args.region)
+    auth = SigV4HttpAuth(args.region, session.get_credentials)
+    client = MCPClient(
+        lambda: streamablehttp_client(gateway_url, auth=auth),
+        application_name="bizflow-agent-gateway-smoke-test",
     )
     with client:
         tools = list(client.list_tools_sync())
         tools_by_business_name = {
             business_tool_name(tool.tool_name): tool.tool_name for tool in tools
         }
-        missing = ALL_BUSINESS_TOOL_NAMES - tools_by_business_name.keys()
+        actual_tool_names = set(tools_by_business_name)
+        missing = READ_ONLY_BUSINESS_TOOL_NAMES - actual_tool_names
         if missing:
             raise RuntimeError(
                 "Gateway did not list the expected tools: " + ", ".join(sorted(missing))
             )
-        print("Gateway tools/list: Passed (5 tools)")
+        unexpected = actual_tool_names - READ_ONLY_BUSINESS_TOOL_NAMES
+        if unexpected:
+            raise RuntimeError(
+                "Gateway listed unexpected tools: " + ", ".join(sorted(unexpected))
+            )
+        print("Gateway tools/list: Passed (4 read-only tools)")
 
         requests_result = invoke_tool(
             client,
@@ -170,20 +160,6 @@ def main() -> int:
             "search_company_rules: Passed "
             f"(count={rules_data.get('count', 'not-reported')})"
         )
-
-        invoke_tool_expect_error(
-            client,
-            tools_by_business_name["create_business_task"],
-            {
-                "approval_id": "APR-GATEWAY-MUST-NOT-WRITE",
-                "request_id": "REQ-002",
-                "assignee": "security-check",
-                "due_date": args.as_of,
-                "action": "This operation must be rejected before task creation.",
-            },
-            "GATEWAY_WRITE_DISABLED",
-        )
-        print("create_business_task: Rejected by BFF-only boundary")
 
     print("Gateway read-tool smoke test succeeded.")
     print("get_task_status was not invoked because this smoke test creates no task.")

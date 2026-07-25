@@ -60,7 +60,7 @@ def invoke_from_bff(tool_name: str, arguments: dict) -> dict:
     )
 
 
-def test_tool_schema_defines_the_five_portfolio_tools() -> None:
+def test_gateway_tool_schema_defines_only_the_four_read_tools() -> None:
     schema_path = (
         Path(__file__).parents[2]
         / "lambdas"
@@ -73,7 +73,6 @@ def test_tool_schema_defines_the_five_portfolio_tools() -> None:
         "get_business_requests",
         "analyze_request_data",
         "search_company_rules",
-        "create_business_task",
         "get_task_status",
     ]
     assert all(

@@ -273,7 +273,7 @@ class MockWorkflowStore:
 
 
 class BusinessToolsService:
-    """Load synthetic data and execute the five portfolio tool contracts."""
+    """Execute four Gateway reads and the BFF-only task-registration operation."""
 
     def __init__(
         self,

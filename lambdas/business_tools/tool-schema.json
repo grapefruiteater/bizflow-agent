@@ -89,42 +89,6 @@
     }
   },
   {
-    "name": "create_business_task",
-    "description": "承認済みの提案と完全一致する場合だけ担当タスクを登録します。承認状態はバックエンドで再確認されます。",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "approval_id": {
-          "type": "string",
-          "description": "Web/BFFが発行し承認した承認ID。"
-        },
-        "request_id": {
-          "type": "string",
-          "description": "対象問い合わせID。"
-        },
-        "assignee": {
-          "type": "string",
-          "description": "承認された担当者。"
-        },
-        "due_date": {
-          "type": "string",
-          "description": "承認された期限。YYYY-MM-DD形式。"
-        },
-        "action": {
-          "type": "string",
-          "description": "承認された対応内容。"
-        }
-      },
-      "required": [
-        "approval_id",
-        "request_id",
-        "assignee",
-        "due_date",
-        "action"
-      ]
-    }
-  },
-  {
     "name": "get_task_status",
     "description": "登録済みタスクの現在状態と承認情報を取得します。読み取り専用です。",
     "inputSchema": {
@@ -132,7 +96,7 @@
       "properties": {
         "task_id": {
           "type": "string",
-          "description": "create_business_taskが返したタスクID。"
+          "description": "Web/BFFの承認済みタスク登録が返したタスクID。"
         }
       },
       "required": ["task_id"]

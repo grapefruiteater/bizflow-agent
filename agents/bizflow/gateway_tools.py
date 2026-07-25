@@ -23,8 +23,6 @@ READ_ONLY_BUSINESS_TOOL_NAMES = frozenset(
         "get_task_status",
     }
 )
-WRITE_BUSINESS_TOOL_NAMES = frozenset({"create_business_task"})
-ALL_BUSINESS_TOOL_NAMES = READ_ONLY_BUSINESS_TOOL_NAMES | WRITE_BUSINESS_TOOL_NAMES
 
 
 class GatewayConfigurationError(ValueError):
@@ -133,7 +131,7 @@ def create_gateway_mcp_client(
 ) -> Any:
     """Build a Strands MCP client using SigV4 and an explicit tool allow-list."""
 
-    unknown_names = set(allowed_tool_names) - ALL_BUSINESS_TOOL_NAMES
+    unknown_names = set(allowed_tool_names) - READ_ONLY_BUSINESS_TOOL_NAMES
     if not allowed_tool_names or unknown_names:
         raise GatewayConfigurationError(
             "Gateway tool allow-list is empty or contains unknown business tools."

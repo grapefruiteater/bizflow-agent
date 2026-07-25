@@ -11,6 +11,7 @@ from agents.bizflow.gateway_tools import (
     GatewayConfigurationError,
     SigV4HttpAuth,
     business_tool_name,
+    create_gateway_mcp_client,
     is_allowed_business_tool,
     select_read_only_gateway_tools,
     validate_gateway_url,
@@ -84,3 +85,13 @@ def test_read_only_selection_removes_write_tool_even_with_gateway_prefix() -> No
         "BizFlowWriteTools___create_business_task",
         READ_ONLY_BUSINESS_TOOL_NAMES,
     )
+
+
+def test_gateway_client_rejects_the_bff_only_write_operation() -> None:
+    with pytest.raises(GatewayConfigurationError, match="unknown business tools"):
+        create_gateway_mcp_client(
+            GATEWAY_URL,
+            "ap-northeast-1",
+            credentials_provider=lambda: None,
+            allowed_tool_names={"create_business_task"},
+        )

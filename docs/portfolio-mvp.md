@@ -12,7 +12,7 @@
 |---|---|---|
 | AgentCore Runtime | AWSで稼働済み | Version 8、Nova 2 Lite、Gateway読み取りツール、Code Interpreter、短期・利用者別長期Memory、構造化提案 |
 | 架空業務データ | ローカル実装済み | 個人情報を含まないCSVとMarkdownの社内ルール |
-| Lambda業務ツール | CDK・ローカル実装済み | Gateway Lambda target互換の5ツール、S3/DynamoDB adapter、読み取り・書き込み関数の分離 |
+| Lambda業務ツール | CDK・ローカル実装済み | Gateway読み取り4ツール、BFF専用書き込み処理、S3/DynamoDB adapter、読み取り・書き込み関数の分離 |
 | Human-in-the-loop境界 | AWSへ反映・検証済み | DynamoDBで未承認拒否、承認後改変拒否、重複登録防止、監査記録 |
 | S3・DynamoDB・Lambda・Gateway | AWSへdeploy済み | 2026-07-22に初期反映、2026-07-24にWeb BFF直接呼び出し形式を更新 |
 | Runtimeからのツール選択 | AWSへ反映済み | Version 6でSigV4 MCP clientから4つの読み取りツールだけを公開 |
@@ -42,9 +42,9 @@ CSVには契約、障害、請求、総務、注文、申請の問い合わせ�
 - `REQ-005`: 対応中かつ緊急度high、障害ルール対象
 - `REQ-008`: 未対応かつ緊急度high
 
-## 5つのツール
+## 5つの業務操作
 
-AgentCore Gatewayへ登録するツール定義は [`tool-schema.json`](../lambdas/business_tools/tool-schema.json) にあります。GatewayのLambda targetが渡す`bedrockAgentCoreToolName`を使い、共通のLambda handlerから各処理へ振り分けます。AWS上では同じコードを読み取り専用Lambdaと書き込み専用Lambdaへ分け、`BIZFLOW_ALLOWED_TOOLS`とIAM Policyの両方で境界を作ります。
+AgentCore Gatewayへ登録する4つの読み取りツール定義は [`tool-schema.json`](../lambdas/business_tools/tool-schema.json) にあります。GatewayのLambda targetが渡す`bedrockAgentCoreToolName`を使い、共通のLambda handlerから各処理へ振り分けます。5つ目の`create_business_task`はGatewayへ公開せず、Cognito認証済みWeb/BFFだけがWrite Lambdaを直接呼び出します。AWS上では同じコードを読み取り専用Lambdaと書き込み専用Lambdaへ分け、`BIZFLOW_ALLOWED_TOOLS`とIAM Policyの両方で境界を作ります。
 
 | ツール | 種別 | 現在の実装 |
 |---|---|---|
@@ -96,7 +96,7 @@ Agentは`proposed_actions`として問い合わせID、担当者、期限、対�
 1. 完了: S3へ架空CSVと社内ルールを配置する構成。
 2. 完了: DynamoDBへ承認、タスク、監査履歴を保存する構成とadapter。
 3. 完了: 読み取り用と書き込み用の権限を分離したLambda。
-4. 完了: AgentCore Gateway、2つのLambda target、5ツールのschema。
+4. 完了: AgentCore Gateway、読み取り／書き込みLambda、初期2 targetと5ツールのschema。
 5. 完了: CDK diffを確認し、明示承認後にTools Stackをdeployする。
 6. 完了: Gatewayを直接スモークテストし、読み取りツールだけをRuntime Version 4へ接続する。
 7. 完了: BFF専用の承認要求・承認・却下・状態取得Lambdaを追加する。
@@ -111,8 +111,8 @@ Agentは`proposed_actions`として問い合わせID、担当者、期限、対�
 16. 完了: 構造化提案対応RuntimeとWebを更新し、承認・タスク登録までE2Eを再確認する。
 17. 完了: Cognitoの信頼済み利用者IDを使うUser Preference strategyとBFF委任を追加する。
 18. 完了: Memory Stack、Runtime Version 8、Web Serviceへ反映し、別conversationと別利用者で長期Memory分離をE2E確認する。
-19. ローカル第1段階完了・AWS反映前: Write LambdaでGateway contextを拒否し、既存Write targetのDeletionPolicyを`Delete`へ変更する。
-20. 第1段階反映後: Gateway Write targetと書き込みtool schemaを削除し、4つの読み取りツールだけを公開する。
+19. 完了・AWS反映済み: Write LambdaでGateway contextを拒否し、既存Write targetのDeletionPolicyを`Delete`へ変更する。
+20. ローカル実装済み・AWS反映前: Gateway Write targetと書き込みtool schemaを削除し、4つの読み取りツールだけを公開する。
 21. 信頼できるtenant claimを導入する場合だけ、会社共有Memoryを利用者Memoryと別namespaceで追加する。
 
 Tools Stackのリソース、IAM境界、データモデル、Outputs、反映前確認は [`tools-infrastructure.md`](tools-infrastructure.md) にまとめています。
@@ -133,7 +133,7 @@ GatewayはLambdaやAPIをMCPツールとして公開でき、Code Interpreterは
 
 ### 自動テスト
 
-AWSへ接続せず、5ツールと承認境界を検証します。
+AWSへ接続せず、4つのGateway読み取りツール、BFF専用タスク登録、承認境界を検証します。
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest .\tests\tools

@@ -148,7 +148,7 @@ describe("BizFlowAgentToolsStack", () => {
     expect(rendered).not.toContain("dynamodb:Scan");
   });
 
-  test("publishes four read tools while preparing the legacy write target for removal", () => {
+  test("publishes only the four read-only Gateway tools", () => {
     template.hasResourceProperties("AWS::BedrockAgentCore::Gateway", {
       AuthorizerType: "AWS_IAM",
       Name: "bizflow-tools-test",
@@ -157,7 +157,7 @@ describe("BizFlowAgentToolsStack", () => {
       },
       ProtocolType: "MCP",
     });
-    template.resourceCountIs("AWS::BedrockAgentCore::GatewayTarget", 2);
+    template.resourceCountIs("AWS::BedrockAgentCore::GatewayTarget", 1);
     template.hasResourceProperties("AWS::BedrockAgentCore::GatewayTarget", {
       Name: "BizFlowReadTools",
       TargetConfiguration: {
@@ -175,30 +175,9 @@ describe("BizFlowAgentToolsStack", () => {
         },
       },
     });
-    template.hasResourceProperties("AWS::BedrockAgentCore::GatewayTarget", {
-      Name: "BizFlowWriteTools",
-      TargetConfiguration: {
-        Mcp: {
-          Lambda: Match.objectLike({
-            ToolSchema: {
-              InlinePayload: [
-                Match.objectLike({ Name: "create_business_task" }),
-              ],
-            },
-          }),
-        },
-      },
-    });
-    const targets = template.findResources(
-      "AWS::BedrockAgentCore::GatewayTarget",
-    );
-    const writeTarget = Object.values(targets).find(
-      (resource) => resource.Properties?.Name === "BizFlowWriteTools",
-    );
-    expect(writeTarget).toMatchObject({
-      DeletionPolicy: "Delete",
-      UpdateReplacePolicy: "Delete",
-    });
+    const rendered = JSON.stringify(template.toJSON());
+    expect(rendered).not.toContain("BizFlowWriteTools");
+    expect(rendered).not.toContain('"Name":"create_business_task"');
   });
 
   test("allows only the runtime role to invoke this Gateway", () => {

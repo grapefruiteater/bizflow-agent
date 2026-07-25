@@ -22,7 +22,7 @@ const READ_TOOL_NAMES = [
   "search_company_rules",
   "get_task_status",
 ] as const;
-const WRITE_TOOL_NAMES = ["create_business_task"] as const;
+const BFF_WRITE_OPERATION_NAMES = ["create_business_task"] as const;
 const DATA_PREFIX = "portfolio-data";
 
 export interface BizFlowAgentToolsStackProps extends StackProps {
@@ -120,7 +120,7 @@ export class BizFlowAgentToolsStack extends Stack {
       "WriteToolsFunction",
       `bizflow-write-tools-${props.environmentName}`,
       lambdaCode,
-      WRITE_TOOL_NAMES,
+      BFF_WRITE_OPERATION_NAMES,
       false,
       {
         BIZFLOW_WORKFLOW_TABLE: this.workflowTable.tableName,
@@ -189,20 +189,6 @@ export class BizFlowAgentToolsStack extends Stack {
       ),
     });
     readTarget.applyRemovalPolicy(RemovalPolicy.RETAIN);
-
-    const writeTarget = this.gateway.addLambdaTarget("WriteToolsTarget", {
-      gatewayTargetName: "BizFlowWriteTools",
-      description:
-        "Deprecated write target; Lambda rejects Gateway calls while removal is prepared",
-      lambdaFunction: this.writeToolsFunction,
-      toolSchema: bedrockagentcore.ToolSchema.fromInline(
-        selectTools(allTools, WRITE_TOOL_NAMES),
-      ),
-    });
-    // This target was originally deployed with RETAIN. Change its policy in a
-    // separate deployment before removing the resource from the template, or
-    // CloudFormation will retain the target and it will remain discoverable.
-    writeTarget.applyRemovalPolicy(RemovalPolicy.DESTROY);
 
     const runtimeGatewayPolicy = new iam.Policy(
       this,

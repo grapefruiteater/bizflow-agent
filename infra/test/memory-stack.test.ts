@@ -17,24 +17,34 @@ function createMemoryStack(): BizFlowAgentMemoryStack {
 describe("BizFlowAgentMemoryStack", () => {
   const template = Template.fromStack(createMemoryStack());
 
-  test("creates retained short-term memory without extraction strategies", () => {
+  test("creates retained Memory with an actor-isolated user preference strategy", () => {
     template.hasResource("AWS::BedrockAgentCore::Memory", {
       DeletionPolicy: "Retain",
       UpdateReplacePolicy: "Retain",
       Properties: Match.objectLike({
         Name: "BizFlowMemory_test",
-        Description: "BizFlow session scoped short term conversation memory",
+        Description:
+          "BizFlow short term conversations and trusted user preferences",
         EventExpiryDuration: 30,
-        Tags: Match.objectLike({ MemoryScope: "RuntimeSession" }),
+        Tags: Match.objectLike({
+          MemoryScope: "RuntimeSessionAndTrustedUser",
+        }),
+        MemoryStrategies: [
+          {
+            UserPreferenceMemoryStrategy: Match.objectLike({
+              Name: "BizFlowUserPreference",
+              NamespaceTemplates: ["/users/{actorId}/preferences/"],
+            }),
+          },
+        ],
       }),
     });
-    expect(JSON.stringify(template.toJSON())).not.toContain("MemoryStrategies");
   });
 
-  test("grants only short-term read and write to the existing runtime role", () => {
+  test("grants event access and namespace-limited preference retrieval", () => {
     template.hasResourceProperties("AWS::IAM::Policy", {
       PolicyDocument: {
-        Statement: [
+        Statement: Match.arrayWith([
           Match.objectLike({
             Action: [
               "bedrock-agentcore:CreateEvent",
@@ -43,13 +53,24 @@ describe("BizFlowAgentMemoryStack", () => {
             Effect: "Allow",
             Sid: "UseBizFlowShortTermMemory",
           }),
-        ],
+          Match.objectLike({
+            Action: "bedrock-agentcore:RetrieveMemoryRecords",
+            Condition: {
+              StringLike: {
+                "bedrock-agentcore:namespace": "/users/*/preferences/",
+              },
+            },
+            Effect: "Allow",
+            Sid: "RetrieveBizFlowUserPreferences",
+          }),
+        ]),
       },
       Roles: ["BizFlowAgentRuntimeRole"],
     });
     const rendered = JSON.stringify(template.toJSON());
     expect(rendered).not.toContain("bedrock-agentcore:DeleteEvent");
-    expect(rendered).not.toContain("bedrock-agentcore:RetrieveMemoryRecords");
+    expect(rendered).not.toContain("bedrock-agentcore:DeleteMemoryRecord");
+    expect(rendered).not.toContain("bedrock-agentcore:UpdateMemoryRecord");
   });
 
   test("exports runtime integration values", () => {
@@ -57,6 +78,8 @@ describe("BizFlowAgentMemoryStack", () => {
       "AgentMemoryId",
       "AgentMemoryArn",
       "AgentMemoryEventExpiryDays",
+      "AgentMemoryUserPreferenceNamespaceTemplate",
+      "AgentMemoryLongTermStrategyType",
     ]) {
       template.hasOutput(outputName, {});
     }

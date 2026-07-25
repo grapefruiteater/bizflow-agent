@@ -251,7 +251,11 @@ export function Workspace() {
               </button>
               {agentResult && (
                 <div className="agent-answer">
-                  <div className="answer-meta"><span>分析完了</span><span>Memory {agentResult.memory?.context_turns ?? 0} turn</span></div>
+                  <div className="answer-meta">
+                    <span>分析完了</span>
+                    <span>Memory {agentResult.memory?.context_turns ?? 0} turn</span>
+                    <span>設定 {agentResult.memory?.preference_records ?? 0}件</span>
+                  </div>
                   <pre>{agentResult.response}</pre>
                 </div>
               )}

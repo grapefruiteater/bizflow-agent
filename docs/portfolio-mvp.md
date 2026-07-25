@@ -10,7 +10,7 @@
 
 | 段階 | 状態 | 内容 |
 |---|---|---|
-| AgentCore Runtime | AWSで稼働済み | Version 6、Nova 2 Lite、Gateway読み取りツール、Code Interpreter、短期Memory、`PROD` Endpoint確認済み |
+| AgentCore Runtime | AWSで稼働済み | Nova 2 Lite、Gateway読み取りツール、Code Interpreter、短期Memory、構造化提案、`PROD` Endpoint確認済み |
 | 架空業務データ | ローカル実装済み | 個人情報を含まないCSVとMarkdownの社内ルール |
 | Lambda業務ツール | CDK・ローカル実装済み | Gateway Lambda target互換の5ツール、S3/DynamoDB adapter、読み取り・書き込み関数の分離 |
 | Human-in-the-loop境界 | AWSへ反映・検証済み | DynamoDBで未承認拒否、承認後改変拒否、重複登録防止、監査記録 |
@@ -18,11 +18,11 @@
 | Runtimeからのツール選択 | AWSへ反映済み | Version 6でSigV4 MCP clientから4つの読み取りツールだけを公開 |
 | 承認バックエンドLambda | AWSへdeploy・検証済み | Gatewayから分離し、承認要求・承認・却下・状態取得を処理 |
 | Code Interpreter | AWSへ反映・検証済み | Version 6への更新時も自動スモークテスト成功 |
-| AgentCore Memory | AWSへ反映・検証済み | Version 6で同一Runtime sessionの2ターン保存・再取得に成功。長期設定は認証後に追加 |
+| AgentCore Memory | 短期はAWS、長期はローカル実装済み | 同一Runtime sessionの2ターン保存・再取得に成功。Cognito利用者別User PreferenceはAWS反映前 |
 | Next.js Web/BFF | AWSへdeploy・E2E検証済み | ダッシュボード、Agentチャット、承認カード、タスク登録、履歴画面 |
 | Web Foundation | AWSへdeploy済み | Web用ECR、2 AZのVPC、Cognito、ALB、Route 53、WAF、ECS ClusterとOutputsを確認済み |
 | Web Service / Fargate | AWSへdeploy・E2E検証済み | ARM64イメージ、private subnet、Cognito認証Listener Rule、最小権限Task Role |
-| 構造化提案・カード連携 | ローカル実装・検証済み | RuntimeのPydantic契約、BFF再検証、候補選択、承認カード自動反映。AWS反映前 |
+| 構造化提案・カード連携 | AWSへ反映・E2E検証済み | RuntimeのPydantic契約、BFF再検証、候補選択、承認カード自動反映 |
 
 構成図 [`bizflow_agent_architecture.drawio`](../bizflow_agent_architecture.drawio) は完成形の目標構成です。現在動いているリソースと目標構成を混同しないよう、上表を実装状況の基準とします。
 
@@ -73,7 +73,7 @@ AgentCore Gatewayへ登録するツール定義は [`tool-schema.json`](../lambd
 
 承認要求、承認、却下、状態取得を行うBFF向けLambdaはAWSへ反映済みで、DynamoDBの承認本体と監査イベントを確認済みです。このLambdaはGateway targetにしません。Next.js BFFはCognito identityからactorを決め、承認済み提案を再取得してWrite Lambdaへ渡します。AWS上でもCognito承認者による分析、承認、タスク登録、監査イベント3件のE2Eを確認済みです。
 
-次回反映用ソースでは、Agentが`proposed_actions`として問い合わせID、担当者、期限、対応内容、理由、参照ルールを構造化して返します。BFFは読み取り専用契約を再検証し、正常な候補だけを承認カードへ自動反映します。これによりAgentの文章をWebが解析したり、固定のカード初期値を使用したりしません。
+Agentは`proposed_actions`として問い合わせID、担当者、期限、対応内容、理由、参照ルールを構造化して返します。BFFは読み取り専用契約を再検証し、正常な候補だけを承認カードへ自動反映します。これによりAgentの文章をWebが解析したり、固定のカード初期値を使用したりしません。この経路はAWS Web E2Eまで確認済みです。
 
 ## 面接デモの完成フロー
 
@@ -107,10 +107,12 @@ AgentCore Gatewayへ登録するツール定義は [`tool-schema.json`](../lambd
 12. 完了: Memory StackとRuntime Version 6をAWSへ反映し、2ターンの保存・再取得を確認する。
 13. 完了: Cognito、Next.js/BFF、ECS/Fargate、承認カードと実行履歴画面を追加する。
 14. 完了: Web Foundation、Web Service、BFF用Lambda更新をdeployし、Cognitoログインからタスク登録・監査履歴までE2E検証する。
-15. ローカル完了・AWS反映前: Agentの構造化提案、BFF契約検証、承認カード自動反映を追加する。
-16. 構造化提案対応Runtimeを先に公開し、続いて同じGit SHAのWebを更新してE2Eを再確認する。
-17. Cognitoの信頼済み利用者・会社IDを使う長期Memory strategyを追加する。
-18. タスク登録はBFF経路に限定し、RuntimeのMCP書き込みallow-listは必要性を再評価する。
+15. 完了: Agentの構造化提案、BFF契約検証、承認カード自動反映を追加する。
+16. 完了: 構造化提案対応RuntimeとWebを更新し、承認・タスク登録までE2Eを再確認する。
+17. ローカル完了・AWS反映前: Cognitoの信頼済み利用者IDを使うUser Preference strategyとBFF委任を追加する。
+18. Memory Stack、Runtime、Web Serviceの順に反映し、別conversationと別利用者で長期Memory分離をE2E確認する。
+19. 信頼できるtenant claimを導入してから、会社共有Memoryを利用者Memoryと別namespaceで追加する。
+20. タスク登録はBFF経路に限定し、RuntimeのMCP書き込みallow-listは必要性を再評価する。
 
 Tools Stackのリソース、IAM境界、データモデル、Outputs、反映前確認は [`tools-infrastructure.md`](tools-infrastructure.md) にまとめています。
 

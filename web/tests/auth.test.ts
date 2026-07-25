@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   type AccessTokenVerifier,
   deriveRuntimeSessionId,
+  deriveRuntimeUserId,
   getIdentity,
   requireApprover,
   requireCsrfHeader,
@@ -120,6 +121,19 @@ describe("BFF authentication boundary", () => {
     expect(first).toHaveLength(64);
     expect(repeated).toBe(first);
     expect(other).not.toBe(first);
+  });
+
+  it("derives an opaque stable AgentCore user ID from the verified actor", () => {
+    const actor = "cognito:11111111-2222-3333-4444-555555555555";
+    const first = deriveRuntimeUserId(actor);
+    const repeated = deriveRuntimeUserId(actor);
+    const other = deriveRuntimeUserId("cognito:another-user");
+
+    expect(first).toMatch(/^bizflow-user-[0-9a-f]{64}$/);
+    expect(repeated).toBe(first);
+    expect(other).not.toBe(first);
+    expect(first).not.toContain("11111111");
+    expect(first).not.toContain(actor);
   });
 
   it("requires the custom CSRF header for write requests", () => {

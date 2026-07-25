@@ -2,6 +2,7 @@ import {
   BedrockAgentCoreClient,
   InvokeAgentRuntimeCommand,
 } from "@aws-sdk/client-bedrock-agentcore";
+import type { InvokeAgentRuntimeCommandInput } from "@aws-sdk/client-bedrock-agentcore";
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import type {
   AgentResult,
@@ -82,21 +83,15 @@ export async function getDashboard(): Promise<DashboardData> {
 export async function invokeAgent(
   prompt: string,
   runtimeSessionId: string,
+  runtimeUserId: string,
 ): Promise<AgentResult> {
   if (isLocalDemo()) {
     return invokeDemoAgent(prompt);
   }
   const response = await agentCoreClient.send(
-    new InvokeAgentRuntimeCommand({
-      agentRuntimeArn: requireEnvironment("BIZFLOW_AGENT_RUNTIME_ARN"),
-      runtimeSessionId,
-      qualifier: process.env.BIZFLOW_AGENT_ENDPOINT_NAME ?? "PROD",
-      contentType: "application/json",
-      accept: "application/json",
-      payload: JSON.stringify({
-        prompt: addAnalysisScope(prompt, analysisScopeFromEnvironment()),
-      }),
-    }),
+    new InvokeAgentRuntimeCommand(
+      buildAgentInvocationInput(prompt, runtimeSessionId, runtimeUserId),
+    ),
   );
   const text = await response.response?.transformToString();
   if (!text) {
@@ -109,6 +104,24 @@ export async function invokeAgent(
     throw new AppError("INVALID_AGENT_RESPONSE", "AgentCore応答を解析できません。", 502);
   }
   return requireAgentResult(parsed);
+}
+
+export function buildAgentInvocationInput(
+  prompt: string,
+  runtimeSessionId: string,
+  runtimeUserId: string,
+): InvokeAgentRuntimeCommandInput {
+  return {
+    agentRuntimeArn: requireEnvironment("BIZFLOW_AGENT_RUNTIME_ARN"),
+    runtimeSessionId,
+    runtimeUserId,
+    qualifier: process.env.BIZFLOW_AGENT_ENDPOINT_NAME ?? "PROD",
+    contentType: "application/json",
+    accept: "application/json",
+    payload: JSON.stringify({
+      prompt: addAnalysisScope(prompt, analysisScopeFromEnvironment()),
+    }),
+  };
 }
 
 export async function requestApproval(

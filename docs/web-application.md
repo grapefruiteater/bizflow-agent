@@ -4,11 +4,13 @@
 
 Next.jsのダッシュボード、Agentチャット、承認カード、タスク登録、承認履歴画面と、それらをAWSへ配置する2つのCDK Stackを実装済みです。ローカルテスト、Next.js本番ビルド、`linux/arm64` Docker build、ローカルコンテナのヘルスチェック、CDKテストと`--no-lookups` synthまで完了しています。
 
-2026-07-23に`BizFlowWebFoundationStack`をAWSへdeployし、Web用ECR、VPC、Cognito、ALB、Route 53 Alias、WAF、ECS Cluster、Outputsを確認済みです。2026-07-24にはTools StackへWeb BFF用のRead/Write Lambda直接呼び出し形式を反映し、`BizFlowWebServiceStack`もdeployしました。Cognitoログイン、ダッシュボード、Agent分析のAWS E2Eを確認済みです。既にAWSで稼働しているRuntime Version 6とMemory StackへWeb関連deployによる変更は加えていません。
+2026-07-23に`BizFlowWebFoundationStack`をAWSへdeployし、Web用ECR、VPC、Cognito、ALB、Route 53 Alias、WAF、ECS Cluster、Outputsを確認済みです。2026-07-24にはTools StackへWeb BFF用のRead/Write Lambda直接呼び出し形式を反映し、`BizFlowWebServiceStack`もdeployしました。Cognitoログイン、ダッシュボード、構造化提案のカード反映、承認、タスク登録、監査履歴のAWS E2Eを確認済みです。
 
 ALBの`x-amzn-oidc-data`はCognito ID tokenではなくUserInfo由来のclaimsであり、`cognito:groups`を認可元として期待できません。BFFは`x-amzn-oidc-accesstoken`をCognito User Poolとapp clientに対して署名検証し、access tokenの`sub`とALB identityの一致を確認してから`cognito:groups`を評価します。この修正はAWSへ反映済みで、`BizFlowApprovers`利用者による分析、承認、タスク登録、監査イベント3件のE2Eを確認済みです。
 
-Agentの文章から承認内容を推測する処理は行いません。次回反映用ソースではRuntimeが`output_contract_version: "1.0"`と検証済み`proposed_actions`を返し、BFFが契約を再検証して承認カードへ自動反映します。複数候補は選択でき、理由と参照ルールを表示します。このRuntime/Web更新はローカルテストとARM64 Docker buildまで完了し、AWS反映前です。
+Agentの文章から承認内容を推測する処理は行いません。Runtimeが`output_contract_version: "1.0"`と検証済み`proposed_actions`を返し、BFFが契約を再検証して承認カードへ自動反映します。複数候補は選択でき、理由と参照ルールを表示します。このRuntime/Web更新はAWS E2Eまで確認済みです。
+
+次の更新として、BFFが検証済みCognito identityから不透明な`runtimeUserId`を導出し、利用者別AgentCore Memoryへ委任する処理をローカル実装しました。Web Task Roleの`InvokeAgentRuntimeForUser`とWebイメージ更新はAWS反映前です。
 
 ## 構成
 
@@ -52,7 +54,7 @@ Next.js standalone serverは`HOSTNAME`を待受アドレスとして使用しま
 
 Web Task Roleから3つの業務Lambdaを直接呼び出すIAM Resourceには、Lambda関数ARNの`function:関数名`形式を使用します。`function/関数名`では実際のLambda ARNと一致せず、`lambda:InvokeFunction`が`AccessDeniedException`になるため、CDKのARN形式を明示して回帰テストで固定しています。
 
-`PROD` qualifierを指定するAgentCore呼び出しでは、Task RoleへRuntime ARNだけでなく`AgentRuntimeEndpointArn`も許可します。AgentCoreはRuntimeと指定Endpointの両方を階層的に認可するため、Endpoint ARNはRuntime Stack Outputsから取得し、ソースへ埋め込みません。
+`PROD` qualifierを指定するAgentCore呼び出しでは、Task RoleへRuntime ARNだけでなく`AgentRuntimeEndpointArn`も許可します。AgentCoreはRuntimeと指定Endpointの両方を階層的に認可するため、Endpoint ARNはRuntime Stack Outputsから取得し、ソースへ埋め込みません。利用者別Memory更新では同じ2リソースに`InvokeAgentRuntimeForUser`も追加します。`*`は使用しません。
 
 「今週」のような相対日付をモデルへ推測させないため、Web BFFは`BIZFLOW_DATA_START_DATE`、`BIZFLOW_DATA_END_DATE`、`BIZFLOW_ANALYSIS_AS_OF`をAgent向けプロンプトへ固定コンテキストとして付加します。ダッシュボードとAgentは同じ期間を参照し、日付設定が`YYYY-MM-DD`でなければモデルを呼ばずにエラーとします。
 
@@ -93,7 +95,8 @@ BFF境界で不正なRuntime応答を検出した場合は`INVALID_AGENT_RESPONS
 - `approve`、`reject`、`execute`は`BizFlowApprovers`グループだけに許可する。
 - state-changing APIは`x-bizflow-csrf: 1`ヘッダーを必須にする。
 - AgentCore Runtime session IDは、認証済みactorとブラウザ内conversation IDからBFFがSHA-256で生成する。request本文に任意のRuntime session IDを指定させない。
-- BFFのTask Roleは対象Runtimeと3つのLambdaだけを呼び出せる。
+- AgentCore Runtime user IDは、認証済みactorを別のSHA-256ドメインでハッシュし、`bizflow-user-<64桁hex>`として生成する。生のCognito `sub`をRuntimeへ渡さない。
+- BFFのTask Roleは対象Runtime/`PROD`への`InvokeAgentRuntime`と`InvokeAgentRuntimeForUser`、3つのLambdaだけを呼び出せる。
 - BFFは承認済み提案をApproval Lambdaから再取得し、その完全な内容をWrite Lambdaへ渡す。
 - Write Lambda/DynamoDBでも`APPROVED`状態、提案一致、冪等性を再検証する。
 - RuntimeのMCP allow-listには引き続き`create_business_task`を含めない。

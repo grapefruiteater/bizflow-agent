@@ -104,7 +104,10 @@ export class BizFlowWebServiceStack extends Stack {
     taskDefinition.taskRole.addToPrincipalPolicy(
       new iam.PolicyStatement({
         sid: "InvokeBizFlowAgentRuntime",
-        actions: ["bedrock-agentcore:InvokeAgentRuntime"],
+        actions: [
+          "bedrock-agentcore:InvokeAgentRuntime",
+          "bedrock-agentcore:InvokeAgentRuntimeForUser",
+        ],
         // AgentCore performs hierarchical authorization for both resources
         // when a qualifier targets a named Runtime endpoint.
         resources: [props.agentRuntimeArn, props.agentRuntimeEndpointArn],

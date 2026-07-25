@@ -96,7 +96,10 @@ export function invokeDemoAgent(prompt: string): AgentResult {
     write_operations_performed: false,
     memory: {
       enabled: true,
+      user_scoped: true,
       context_turns: 1,
+      preference_records: 1,
+      long_term_extraction_enabled: true,
       event_stored: true,
       degraded: false,
     },

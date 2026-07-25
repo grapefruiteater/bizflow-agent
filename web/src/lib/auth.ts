@@ -108,6 +108,14 @@ export function deriveRuntimeSessionId(actor: string, conversationId: unknown): 
     .digest("hex");
 }
 
+export function deriveRuntimeUserId(actor: string): string {
+  const normalizedActor = requireText(actor, "actor", 256);
+  const digest = createHash("sha256")
+    .update(`bizflow-runtime-user-v1\n${normalizedActor}`, "utf8")
+    .digest("hex");
+  return `bizflow-user-${digest}`;
+}
+
 function getConfiguredAccessTokenVerifier(): AccessTokenVerifier {
   const userPoolId = requireAuthEnvironment(
     COGNITO_USER_POOL_ID_ENVIRONMENT_VARIABLE,

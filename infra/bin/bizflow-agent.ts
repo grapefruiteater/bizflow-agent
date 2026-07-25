@@ -75,7 +75,8 @@ if (enableMemory) {
     "BizFlowAgentMemoryStack",
     {
       env: deploymentEnvironment,
-      description: "Session-scoped AgentCore Memory for BizFlow Agent",
+      description:
+        "Session conversations and trusted user preferences for BizFlow Agent",
       environmentName,
       runtimeExecutionRoleArn,
     },

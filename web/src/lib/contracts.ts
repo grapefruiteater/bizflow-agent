@@ -34,7 +34,10 @@ export interface AgentResult {
   write_operations_performed: false;
   memory?: {
     enabled?: boolean;
+    user_scoped?: boolean;
     context_turns?: number;
+    preference_records?: number;
+    long_term_extraction_enabled?: boolean;
     event_stored?: boolean;
     degraded?: boolean;
   };

@@ -37,6 +37,10 @@ param(
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$')]
     [string]$RuntimeSessionId,
 
+    [Parameter(ParameterSetName = "Remote")]
+    [ValidatePattern('^bizflow-user-[0-9a-f]{64}$')]
+    [string]$RuntimeUserId,
+
     [switch]$RequireMemory,
 
     [ValidateRange(0, 100)]
@@ -140,6 +144,14 @@ function Assert-SmokeResponse {
         if (-not [bool](Get-PropertyValue -Object $memory -Names @("session_available"))) {
             throw "Invocation response did not report a Runtime session for Memory."
         }
+        if ($RuntimeUserId) {
+            if (-not [bool](Get-PropertyValue -Object $memory -Names @("user_scoped"))) {
+                throw "Invocation response did not report trusted user-scoped Memory."
+            }
+            if (-not [bool](Get-PropertyValue -Object $memory -Names @("long_term_extraction_enabled"))) {
+                throw "Invocation response did not report long-term Memory extraction as enabled."
+            }
+        }
         if ([bool](Get-PropertyValue -Object $memory -Names @("degraded"))) {
             throw "Invocation response reported degraded Memory operations."
         }
@@ -209,11 +221,18 @@ function Invoke-RemoteSmokeTest {
             [guid]::NewGuid().ToString()
         }
 
+        $runtimeUserArguments = if ($RuntimeUserId) {
+            @("--runtime-user-id", $RuntimeUserId)
+        }
+        else {
+            @()
+        }
         $arguments = @(
             "bedrock-agentcore", "invoke-agent-runtime",
             "--content-type", "application/json",
             "--accept", "application/json",
-            "--runtime-session-id", $sessionId,
+            "--runtime-session-id", $sessionId
+        ) + $runtimeUserArguments + @(
             "--agent-runtime-arn", $AgentRuntimeArn,
             "--qualifier", $EndpointName,
             "--payload", $payloadUri,

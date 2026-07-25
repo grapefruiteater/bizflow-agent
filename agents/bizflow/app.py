@@ -17,6 +17,7 @@ try:
         AgentCoreConversationMemory,
         MemoryConfigurationError,
         MemoryOperationError,
+        validate_runtime_user_id,
     )
 except ImportError:  # The container starts this module directly from /app.
     from bizflow_agent import AgentConfigurationError, BizFlowAnalyzer
@@ -25,6 +26,7 @@ except ImportError:  # The container starts this module directly from /app.
         AgentCoreConversationMemory,
         MemoryConfigurationError,
         MemoryOperationError,
+        validate_runtime_user_id,
     )
 
 LOGGER = logging.getLogger("bizflow.runtime")
@@ -61,8 +63,22 @@ def get_conversation_memory() -> AgentCoreConversationMemory | None:
         raise AgentConfigurationError("Runtime memory configuration is invalid.") from exc
 
 
-def handle_invocation(payload: dict[str, Any], session_id: str | None) -> dict[str, Any]:
+def handle_invocation(
+    payload: dict[str, Any],
+    session_id: str | None,
+    runtime_user_id: str | None = None,
+) -> dict[str, Any]:
     """Validate and run one read-only BizFlow analysis request."""
+
+    trusted_runtime_user_id: str | None = None
+    if runtime_user_id:
+        try:
+            trusted_runtime_user_id = validate_runtime_user_id(runtime_user_id)
+        except MemoryOperationError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="The Runtime user ID has an invalid format.",
+            ) from exc
 
     nested_input = payload.get("input")
     prompt = payload.get("prompt")
@@ -121,24 +137,43 @@ def handle_invocation(payload: dict[str, Any], session_id: str | None) -> dict[s
         memory_status = {
             "enabled": True,
             "session_available": bool(session_id),
+            "user_scoped": bool(trusted_runtime_user_id),
             "context_turns": 0,
+            "preference_records": 0,
+            "long_term_extraction_enabled": bool(
+                session_id
+                and trusted_runtime_user_id
+                and memory.user_preference_namespace_template
+            ),
             "event_stored": False,
             "degraded": False,
         }
         if session_id:
             try:
-                memory_context = memory.load_context(analysis_prompt, session_id)
+                memory_context = memory.load_context(
+                    analysis_prompt,
+                    session_id,
+                    trusted_runtime_user_id,
+                )
                 analysis_prompt = memory_context.prompt
                 memory_status["context_turns"] = memory_context.turn_count
+                memory_status["preference_records"] = (
+                    memory_context.preference_count
+                )
             except MemoryOperationError:
-                LOGGER.exception("Continuing without short-term memory context")
+                LOGGER.exception("Continuing without Memory context")
                 memory_status["degraded"] = True
 
     analysis = get_analyzer().analyze(analysis_prompt)
     response_text = analysis.response
     if memory is not None and session_id:
         try:
-            memory.save_turn(session_id, prompt.strip(), response_text)
+            memory.save_turn(
+                session_id,
+                prompt.strip(),
+                response_text,
+                trusted_runtime_user_id,
+            )
             if memory_status is not None:
                 memory_status["event_stored"] = True
         except MemoryOperationError:
@@ -179,6 +214,10 @@ async def invocations(
         default=None,
         alias="X-Amzn-Bedrock-AgentCore-Runtime-Session-Id",
     ),
+    runtime_user_id: str | None = Header(
+        default=None,
+        alias="X-Amzn-Bedrock-AgentCore-Runtime-User-Id",
+    ),
 ) -> JSONResponse:
     """Accept an AgentCore invocation and return a JSON response."""
 
@@ -191,11 +230,17 @@ async def invocations(
         raise HTTPException(status_code=422, detail="Request body must be a JSON object.")
 
     LOGGER.info(
-        "Invocation received session_id=%s",
+        "Invocation received session_id=%s user_scoped=%s",
         runtime_session_id or "not-provided",
+        bool(runtime_user_id),
     )
     try:
-        result = await run_in_threadpool(handle_invocation, payload, runtime_session_id)
+        result = await run_in_threadpool(
+            handle_invocation,
+            payload,
+            runtime_session_id,
+            runtime_user_id,
+        )
     except AgentConfigurationError:
         LOGGER.error("Runtime model configuration is missing or invalid.")
         return JSONResponse(

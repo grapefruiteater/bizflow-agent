@@ -302,16 +302,32 @@ function Read-MemoryConfiguration {
             Where-Object {
                 $null -ne $_ -and
                 $null -ne $_.PSObject.Properties["AgentMemoryId"] -and
-                $null -ne $_.PSObject.Properties["AgentMemoryArn"]
+                $null -ne $_.PSObject.Properties["AgentMemoryArn"] -and
+                $null -ne $_.PSObject.Properties["AgentMemoryUserPreferenceNamespaceTemplate"] -and
+                $null -ne $_.PSObject.Properties["AgentMemoryLongTermStrategyType"]
             }
     )
     if ($candidates.Count -ne 1) {
-        throw "Could not find one AgentMemoryId and AgentMemoryArn pair in the Memory Outputs file."
+        throw "Could not find one complete Memory configuration in the Outputs file. Deploy the Memory Stack update so the user preference namespace and strategy outputs are present."
+    }
+
+    $namespaceTemplate = [string]$candidates[0].AgentMemoryUserPreferenceNamespaceTemplate
+    $strategyType = [string]$candidates[0].AgentMemoryLongTermStrategyType
+    if ($namespaceTemplate -notmatch '^/[A-Za-z0-9_/{}/.-]+/$' -or
+        ([regex]::Matches($namespaceTemplate, '\{actorId\}')).Count -ne 1 -or
+        $namespaceTemplate.Contains("*") -or
+        $namespaceTemplate.Contains("?")) {
+        throw "AgentMemoryUserPreferenceNamespaceTemplate must be an absolute namespace ending in '/' with exactly one {actorId} placeholder."
+    }
+    if ($strategyType -ne "USER_PREFERENCE") {
+        throw "AgentMemoryLongTermStrategyType must be USER_PREFERENCE."
     }
 
     return [pscustomobject]@{
         MemoryId = [string]$candidates[0].AgentMemoryId
         MemoryArn = [string]$candidates[0].AgentMemoryArn
+        UserPreferenceNamespaceTemplate = $namespaceTemplate
+        LongTermStrategyType = $strategyType
     }
 }
 
@@ -600,6 +616,8 @@ if ($EnableCodeInterpreter) {
 Write-Host "  Memory:           $([bool]$EnableMemory)"
 if ($memoryConfiguration) {
     Write-Host "  Memory ID:        $($memoryConfiguration.MemoryId)"
+    Write-Host "  Memory strategy:  $($memoryConfiguration.LongTermStrategyType)"
+    Write-Host "  User namespace:   $($memoryConfiguration.UserPreferenceNamespaceTemplate)"
     Write-Host "  Memory config:    $MemoryConfigPath"
 }
 if ($existingImageDigest) {
@@ -656,6 +674,8 @@ $record = [pscustomobject]@{
     codeInterpreterId = if ($EnableCodeInterpreter) { $CodeInterpreterId } else { $null }
     memoryEnabled = [bool]$EnableMemory
     memoryId = if ($memoryConfiguration) { $memoryConfiguration.MemoryId } else { $null }
+    memoryLongTermStrategyType = if ($memoryConfiguration) { $memoryConfiguration.LongTermStrategyType } else { $null }
+    memoryUserPreferenceNamespaceTemplate = if ($memoryConfiguration) { $memoryConfiguration.UserPreferenceNamespaceTemplate } else { $null }
     runtimeVersion = $null
     endpointName = $configuration.EndpointName
     metadataConfiguration = [ordered]@{
@@ -736,6 +756,7 @@ try {
     }
     if ($memoryConfiguration) {
         $runtimeEnvironmentVariables["BIZFLOW_MEMORY_ID"] = $memoryConfiguration.MemoryId
+        $runtimeEnvironmentVariables["BIZFLOW_MEMORY_USER_PREFERENCE_NAMESPACE_TEMPLATE"] = $memoryConfiguration.UserPreferenceNamespaceTemplate
     }
     $updateRequest = [ordered]@{
         agentRuntimeId = $configuration.AgentRuntimeId

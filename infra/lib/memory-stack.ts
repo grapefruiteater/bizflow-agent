@@ -10,6 +10,8 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
 
 const SHORT_TERM_MEMORY_EXPIRY_DAYS = 30;
+export const USER_PREFERENCE_NAMESPACE_TEMPLATE =
+  "/users/{actorId}/preferences/";
 
 export interface BizFlowAgentMemoryStackProps extends StackProps {
   readonly environmentName: string;
@@ -35,18 +37,29 @@ export class BizFlowAgentMemoryStack extends Stack {
 
     this.memory = new bedrockagentcore.Memory(this, "ConversationMemory", {
       memoryName: `BizFlowMemory_${props.environmentName}`,
-      description: "BizFlow session scoped short term conversation memory",
+      description:
+        "BizFlow short term conversations and trusted user preferences",
       expirationDuration: Duration.days(SHORT_TERM_MEMORY_EXPIRY_DAYS),
       tags: {
         Application: "BizFlowAgent",
         Environment: props.environmentName,
         ManagedBy: "AWS-CDK",
-        MemoryScope: "RuntimeSession",
+        MemoryScope: "RuntimeSessionAndTrustedUser",
       },
     });
     const cfnMemory = this.memory.node.findChild(
       "Memory",
     ) as bedrockagentcore.CfnMemory;
+    cfnMemory.memoryStrategies = [
+      {
+        userPreferenceMemoryStrategy: {
+          name: "BizFlowUserPreference",
+          description:
+            "Remember user preferences from Cognito-authenticated BizFlow sessions",
+          namespaceTemplates: [USER_PREFERENCE_NAMESPACE_TEMPLATE],
+        },
+      },
+    ];
     cfnMemory.applyRemovalPolicy(RemovalPolicy.RETAIN);
 
     const runtimeMemoryPolicy = new iam.Policy(this, "RuntimeMemoryPolicy", {
@@ -58,6 +71,16 @@ export class BizFlowAgentMemoryStack extends Stack {
             "bedrock-agentcore:ListEvents",
           ],
           resources: [this.memory.memoryArn],
+        }),
+        new iam.PolicyStatement({
+          sid: "RetrieveBizFlowUserPreferences",
+          actions: ["bedrock-agentcore:RetrieveMemoryRecords"],
+          resources: [this.memory.memoryArn],
+          conditions: {
+            StringLike: {
+              "bedrock-agentcore:namespace": "/users/*/preferences/",
+            },
+          },
         }),
       ],
     });
@@ -74,6 +97,15 @@ export class BizFlowAgentMemoryStack extends Stack {
     new CfnOutput(this, "AgentMemoryEventExpiryDays", {
       description: "Short-term conversation event retention in days",
       value: SHORT_TERM_MEMORY_EXPIRY_DAYS.toString(),
+    });
+    new CfnOutput(this, "AgentMemoryUserPreferenceNamespaceTemplate", {
+      description:
+        "Actor-isolated namespace template used for long-term user preferences",
+      value: USER_PREFERENCE_NAMESPACE_TEMPLATE,
+    });
+    new CfnOutput(this, "AgentMemoryLongTermStrategyType", {
+      description: "Long-term Memory strategy enabled for BizFlow",
+      value: "USER_PREFERENCE",
     });
   }
 }

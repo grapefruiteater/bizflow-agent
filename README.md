@@ -8,11 +8,11 @@ AWS基盤は、以前のアプリやCDKスタックで作成したリソース�
 
 ## 現在の状態
 
-2026-07-24時点では、AgentCore Runtime Version 6がAWSの`PROD` Endpointで稼働しています。RuntimeはAmazon Nova 2 Lite、AgentCore Gatewayの読み取りツール、AWS管理Code Interpreter、同一Runtime session内の短期Memoryを使用できます。通常呼び出し、Code Interpreter、Memoryの2ターン保存・再取得、読み取り専用応答契約を検証済みです。Next.js Web/BFFもECS/Fargateへdeploy済みで、Cognitoログイン、分析、承認、タスク登録、監査履歴までのAWS E2Eを確認済みです。
+2026-07-24時点では、AgentCore RuntimeがAWSの`PROD` Endpointで稼働しています。RuntimeはAmazon Nova 2 Lite、AgentCore Gatewayの読み取りツール、AWS管理Code Interpreter、同一Runtime session内の短期Memoryを使用できます。通常呼び出し、Code Interpreter、Memoryの2ターン保存・再取得、構造化提案の読み取り専用応答契約を検証済みです。Next.js Web/BFFもECS/Fargateへdeploy済みで、Cognitoログイン、Agent提案の承認カード自動反映、承認、タスク登録、監査履歴までのAWS E2Eを確認済みです。
 
 | 項目 | 状態 |
 |---|---|
-| AgentCore Runtime | Version 6を`PROD`へ反映・検証済み |
+| AgentCore Runtime | 構造化提案対応版を`PROD`へ反映・検証済み |
 | Runtimeイメージ | GitコミットSHAタグ、ECR digest固定 |
 | Bedrockモデル | `jp.amazon.nova-2-lite-v1:0` |
 | Gateway読み取りツール | 4ツールをRuntimeへ接続済み |
@@ -22,11 +22,11 @@ AWS基盤は、以前のアプリやCDKスタックで作成したリソース�
 | CloudWatch Logs | `PROD`の呼び出しログを確認済み |
 | 承認バックエンドLambda | AWSへdeploy・動作確認済み |
 | Code Interpreter | Runtime Version 6でも自動スモークテスト成功 |
-| AgentCore Memory | Runtime Version 6へ接続し、2ターンの保存・再取得を検証済み |
+| AgentCore Memory | session短期MemoryはAWS検証済み。Cognito利用者別User Preferenceはローカル実装・検証済み、AWS反映前 |
 | Next.js Web/BFF | ECS/Fargateへdeploy済み。Cognitoログインから監査履歴までのAWS E2Eを検証済み |
 | Web Foundation | 2026-07-23にECR、VPC、Cognito、ALB、Route 53、WAF、ECS ClusterをAWSへdeploy・確認済み |
 | Web Service / ECS Fargate | AWSへdeploy済み。Cognitoグループ認可とRuntime/Lambda呼び出し権限を修正し、承認者E2Eを検証済み |
-| 構造化提案・承認カード連携 | Runtime/Webへローカル実装・検証済み。次のRuntime/Web更新でAWSへ反映予定 |
+| 構造化提案・承認カード連携 | Runtime/Webへ反映し、AWS Web E2Eを検証済み |
 
 現在の利用者向け動作は読み取り専用です。モデルは`get_business_requests`、`analyze_request_data`、`search_company_rules`、`get_task_status`を選択できますが、`create_business_task`はMCP allow-listとRuntime側の再フィルタの両方で除外しています。承認されていない書き込みをモデルの判断だけで実行することはありません。
 
@@ -42,7 +42,7 @@ AgentCore Runtimeが要求する次のHTTP Endpointを実装しています。
 
 `POST /invocations` はStrands AgentsとAmazon Bedrockモデルを使う、読み取り専用の業務分析へ接続されています。自由文に加え、構造化された問い合わせ一覧を受け取り、期限超過・緊急・24時間以内期限をPython側で決定的に判定できます。LLMはその判定結果と問い合わせIDを根拠に、要約と対応案を作成します。
 
-次回反映用ソースでは、文章の`response`に加えて`output_contract_version: "1.0"`と最大5件の`proposed_actions`を返します。各提案は問い合わせID、担当者、期限、対応内容、理由、参照ルールIDをPydanticで検証します。Web BFFはこの契約を再検証し、正常な提案だけを承認カードへ自動反映します。候補が複数ある場合は選択でき、提案がない場合は固定の初期値を表示しません。入力形式と判定規則は [`docs/business-analysis.md`](docs/business-analysis.md) を参照してください。
+文章の`response`に加えて`output_contract_version: "1.0"`と最大5件の`proposed_actions`を返します。各提案は問い合わせID、担当者、期限、対応内容、理由、参照ルールIDをPydanticで検証します。Web BFFはこの契約を再検証し、正常な提案だけを承認カードへ自動反映します。候補が複数ある場合は選択でき、提案がない場合は固定の初期値を表示しません。この経路はAWS Web E2Eまで確認済みです。入力形式と判定規則は [`docs/business-analysis.md`](docs/business-analysis.md) を参照してください。
 
 Runtime環境変数`BIZFLOW_GATEWAY_URL`は`config/tools-outputs.json`から公開スクリプトが設定し、ソースへ固定しません。Gateway未設定時は呼び出し元が渡した情報だけを分析するモードへ戻せます。タスク登録、データ更新、承認、外部送信はRuntimeから実行しません。
 
@@ -52,7 +52,7 @@ Web/BFFだけが呼び出す承認バックエンドLambdaもAWSへdeploy済み�
 
 AWS管理の`aws.codeinterpreter.v1`を使うCode Interpreter分析ツールはRuntime Version 6でも有効です。Version 5で1から100までの整数の二乗和`338350`とCloudWatch Logsの完了ログを確認し、Version 6への更新時にも自動スモークテストが成功しました。既存の`analyze_request_data`は決定的なフォールバックとして残しています。詳細は [`docs/code-interpreter.md`](docs/code-interpreter.md) を参照してください。
 
-同一Runtime session ID内だけで会話を継続するAgentCore短期MemoryはRuntime Version 6へ反映済みです。リクエスト本文の自己申告IDは使用せず、AgentCoreがHTTPヘッダーで渡したsession IDからactorを分離します。Cognito導入前は長期Memory strategyを作成しません。同じsession IDを使った2ターンの自動スモークテストで、保存と再取得が成功しました。詳細は [`docs/memory.md`](docs/memory.md)、ポートフォリオ全体は [`docs/portfolio-mvp.md`](docs/portfolio-mvp.md)、ツール基盤は [`docs/tools-infrastructure.md`](docs/tools-infrastructure.md) を参照してください。
+同一Runtime session ID内だけで会話を継続するAgentCore短期MemoryはAWSへ反映済みです。次の更新として、BFFが検証済みCognito identityから生の`sub`を含まないuser IDを導出し、AgentCoreの`runtimeUserId`でRuntimeへ渡す利用者別長期Memoryをローカル実装しました。User Preference strategyは`/users/{actorId}/preferences/`で利用者を分離し、user IDがない直接呼び出しでは長期抽出を行いません。AWS反映と利用者間分離E2Eは未実施です。詳細は [`docs/memory.md`](docs/memory.md)、ポートフォリオ全体は [`docs/portfolio-mvp.md`](docs/portfolio-mvp.md)、ツール基盤は [`docs/tools-infrastructure.md`](docs/tools-infrastructure.md) を参照してください。
 
 採用モデルはAmazon Nova 2 LiteのJP地理推論profileです。
 
@@ -158,11 +158,11 @@ bizflow-agent/
 | `agents/__init__.py` | `agents` をPythonパッケージとして扱うための初期化ファイルです。 |
 | `agents/bizflow/__init__.py` | BizFlow Runtimeパッケージの初期化ファイルです。 |
 | `agents/bizflow/analysis_output.py` | Agent分析結果と承認候補のPydantic契約です。件数、長さ、日付、ルールID、問い合わせIDの重複を検証します。 |
-| `agents/bizflow/app.py` | FastAPIによるAgentCore HTTP Runtimeです。`/ping`、`/invocations`、自由文・構造化業務データの入力検証、構造化提案の応答契約、Runtime session IDヘッダーの受け渡し、内部エラーのマスキングを実装しています。 |
+| `agents/bizflow/app.py` | FastAPIによるAgentCore HTTP Runtimeです。`/ping`、`/invocations`、自由文・構造化業務データの入力検証、構造化提案の応答契約、Runtime session/user IDヘッダーの検証、内部エラーのマスキングを実装しています。 |
 | `agents/bizflow/bizflow_agent.py` | Strands Agent、Bedrockモデル設定、読み取り専用システムプロンプト、`AgentAnalysis`構造化出力を実装します。Gateway設定時だけ4つの読み取りツールを公開し、書き込みツールを除外します。ローカルコンテナ検証専用の決定的な`local-test` providerも含みます。 |
 | `agents/bizflow/business_data.py` | 問い合わせスナップショットを検証し、期限超過・緊急・24時間以内期限を`as_of`基準で決定的に計算します。計算結果と根拠データをLLM向けコンテキストへ変換します。 |
 | `agents/bizflow/code_interpreter_tools.py` | AWS管理のCode Interpreterを1回の分析ごとに開始・停止し、ビジネスデータのPython集計・検算だけをStrandsツールとして公開します。入力・出力長、resource ID、エラー情報を制限します。 |
-| `agents/bizflow/conversation_memory.py` | AgentCore短期Memoryから最大5ターンを取得し、同じRuntime session IDへ利用者依頼と応答を保存します。本文の自己申告IDは使用せず、履歴・保存サイズとエラー情報を制限します。 |
+| `agents/bizflow/conversation_memory.py` | AgentCore短期Memoryから最大5ターンを取得し、信頼済みWeb利用者ではUser Preferenceを最大3件取得・抽出します。本文の自己申告IDは使用せず、session fallback、namespace、履歴・保存サイズ、エラー情報を制限します。 |
 | `agents/bizflow/gateway_tools.py` | AgentCore GatewayへSigV4で接続し、明示allow-listに含まれるMCPツールだけを読み込むclientを構築します。 |
 | `agents/bizflow/Dockerfile` | Python 3.12ベースのRuntimeイメージを作成します。ポート8080を公開し、非rootユーザー `app` でUvicornを起動します。 |
 | `agents/bizflow/.dockerignore` | Git情報、仮想環境、テスト、ドキュメント、ローカル設定などをDocker build contextから除外します。 |
@@ -186,7 +186,7 @@ bizflow-agent/
 | `docs/business-analysis.md` | 構造化された問い合わせ分析の入力項目、決定的な判定規則、応答契約、リクエスト例を説明します。 |
 | `docs/approval-workflow.md` | モデルから分離した承認バックエンドLambdaの操作契約、IAM境界、現在の反映状態を説明します。 |
 | `docs/code-interpreter.md` | 管理済みCode Interpreterのセッション、IAM、Runtime接続、フォールバック、反映順序を説明します。 |
-| `docs/memory.md` | session単位の短期Memory、IAM、保持期間、Runtime応答、反映順序と2ターンスモークテストを説明します。 |
+| `docs/memory.md` | session短期Memory、Cognito利用者別User Preference、IAM/namespace境界、反映順序、短期・長期E2Eを説明します。 |
 | `docs/web-application.md` | Next.js画面、BFF API、Cognito/ALB認証、ECS/Fargate構成、承認境界、ローカル検証、AWS反映順序を説明します。 |
 | `docs/portfolio-mvp.md` | ポートフォリオのシナリオ、現在の実装状態、5ツール、承認境界、今後のAWS実装順序を説明します。 |
 | `docs/tools-infrastructure.md` | S3、DynamoDB、読み取り／書き込みLambda、AgentCore GatewayのCDK設計、IAM境界、Outputs、直接スモークテストとRuntime接続を説明します。 |
@@ -217,11 +217,11 @@ bizflow-agent/
 | `web/src/app/page.tsx` / `components/workspace.tsx` | 問い合わせダッシュボード、Agentチャット、構造化された推奨アクションの選択・承認カード自動反映、承認・却下、承認後タスク登録を表示します。 |
 | `web/src/app/history/page.tsx` / `components/history-view.tsx` | 承認IDから承認内容、承認者、作成タスク、監査イベントを確認する履歴画面です。 |
 | `web/src/app/api/` | dashboard、AgentCore Runtime、承認、タスク登録、履歴、ヘルスチェックのBFF API Routesです。 |
-| `web/src/lib/auth.ts` | ALB/Cognito identity、承認者グループ、CSRF header、actor単位Runtime session IDを検証します。 |
-| `web/src/lib/backend.ts` / `contracts.ts` / `validation.ts` | AgentCore Runtimeと3つのLambdaをAWS SDKで呼び出し、Runtimeの構造化応答をBFF境界で検証して、承認済み提案だけを書き込み経路へ渡します。 |
+| `web/src/lib/auth.ts` | ALB/Cognito identity、承認者グループ、CSRF headerを検証し、actorから分離したRuntime session IDと不透明なuser IDを導出します。 |
+| `web/src/lib/backend.ts` / `contracts.ts` / `validation.ts` | AgentCore Runtimeへsession/user IDをAWS SDKの専用フィールドで渡し、3つのLambdaを呼び出します。Runtimeの構造化応答をBFF境界で検証し、承認済み提案だけを書き込み経路へ渡します。 |
 | `web/src/lib/demo-backend.ts` / `demo-data.ts` | AWSへ接続せず、架空データとメモリ内承認フローを動かすローカルデモbackendです。 |
 | `web/Dockerfile` / `.dockerignore` | Next.js standalone出力を非rootユーザーで起動するFargate向けARM64対応イメージです。 |
-| `web/tests/` | 認証境界、session分離、構造化応答、不正な書き込み主張の拒否、承認カード反映、未承認拒否、承認後登録、冪等性をVitestで検証します。 |
+| `web/tests/` | 認証境界、session/user ID分離、SDKへのuser ID受け渡し、構造化応答、不正な書き込み主張の拒否、承認カード反映、未承認拒否、承認後登録、冪等性をVitestで検証します。 |
 
 ### CDK基盤
 
@@ -229,13 +229,13 @@ bizflow-agent/
 |---|---|
 | `infra/bin/bizflow-agent.ts` | CDKアプリのエントリーポイントです。Runtime、Tools、Memory、Web Foundation、Web Serviceを明示contextでだけ追加します。Web Serviceは各Stack Outputsを設定ファイルから読み、既存Stackとのcross-stack exportを作りません。 |
 | `infra/lib/foundation-stack.ts` | BizFlow専用ECR、AgentCore実行IAMロール、`PUBLIC`ネットワーク設定を作成します。Bedrock権限を指定profile/modelへ限定し、AWS管理Code Interpreterにはセッション利用権限だけを付与します。 |
-| `infra/lib/memory-stack.ts` | 30日保持の短期AgentCore Memoryを作成し、既存Runtimeロールへ対象Memoryの`CreateEvent`と`ListEvents`だけを付与します。 |
+| `infra/lib/memory-stack.ts` | 30日保持のAgentCore Memory、利用者別User Preference strategy、既存Runtimeロールのイベント権限とnamespace限定取得権限を定義します。 |
 | `infra/lib/runtime-stack.ts` | digest固定の初回コンテナからAgentCore Runtime、`PROD`カスタムEndpoint、Endpoint別の30日保持ロググループ、通常更新用Outputsを作成します。`DEFAULT` EndpointはRuntime作成時にAgentCoreが自動作成します。 |
 | `infra/lib/tools-stack.ts` | 合成データ用S3、承認・タスク・監査用DynamoDB、Gateway用の読み取り／書き込みLambda、BFF向け承認Lambda、IAM認証のAgentCore Gatewayと5ツールを定義します。既存RuntimeロールはOutputs由来のARNでimportします。 |
 | `infra/lib/web-foundation-stack.ts` | Web専用ECR、VPC、ECS Cluster、Cognito、HTTPS ALB、Route 53 Alias、WAFを定義します。 |
 | `infra/lib/web-service-stack.ts` | digest固定ARM64イメージのFargate Service、最小権限Task Role、Target Group、Cognito認証Listener Ruleを定義します。 |
 | `infra/test/foundation-stack.test.ts` | ECRとIAM、およびFoundation OutputsのCloudFormation定義を検証します。 |
-| `infra/test/memory-stack.test.ts` | Memoryの保持期間、RETAIN、最小権限、Outputs、長期strategyを作らないことを検証します。 |
+| `infra/test/memory-stack.test.ts` | Memoryの保持期間、RETAIN、User Preference namespace、最小権限、Outputsを検証します。 |
 | `infra/test/runtime-stack.test.ts` | Runtime、Endpoint、ログ、Outputsを検証し、タグや不正なdigestを拒否することを確認します。 |
 | `infra/test/tools-stack.test.ts` | S3/DynamoDB保護、3つのLambdaの分離、最小権限、Gateway targetと5ツール、Outputsを検証します。 |
 | `infra/test/web-foundation-stack.test.ts` / `web-service-stack.test.ts` | Web基盤、認証、ネットワーク、IAM、digest固定、OutputsをCloudFormation template assertionsで検証します。 |
@@ -256,7 +256,7 @@ bizflow-agent/
 - 自動更新される`DEFAULT` Endpointでは`-Execute`を拒否し、明示昇格用のカスタムEndpointを要求する
 - Runtimeが `READY` になるまでEndpointを更新しない
 - 新Runtimeバージョンの手入力後にだけ`PROD` Endpointを切り替える
-- Memory有効時はOutputsのMemory ID・ARN・Account・Region一致を検証する
+- Memory有効時はOutputsのMemory ID・ARN・Account・Region、User Preference strategy、namespace形式を検証する
 - 同一Runtime session IDによる2ターンのMemory保存・再取得を自動検証する
 - 旧バージョンへ戻すコマンドを最後に表示する
 
@@ -265,12 +265,12 @@ bizflow-agent/
 | ファイル | 説明 |
 |---|---|
 | `tests/runtime/test_analysis_output.py` | 構造化提案の直列化、重複ID、余分な項目、不正なルールIDの拒否を検証します。 |
-| `tests/runtime/test_endpoints.py` | `/ping`、`/invocations`、構造化データと提案、入力エラー、session ID、内部エラー応答をAWS接続なしで検証するpytestです。 |
+| `tests/runtime/test_endpoints.py` | `/ping`、`/invocations`、構造化データと提案、入力エラー、session/user ID、Memory状態、内部エラー応答をAWS接続なしで検証するpytestです。 |
 | `tests/runtime/test_bizflow_agent.py` | Runtime設定、ローカルテストprovider、依存注入した分析処理、空応答の拒否をAWS接続なしで検証するpytestです。 |
 | `tests/runtime/test_gateway_tools.py` | Gateway URL制限、SigV4署名、読み取りツールallow-listと書き込みツール除外をAWS接続なしで検証します。 |
 | `tests/runtime/test_business_data.py` | 期限超過などの業務判定と、タイムゾーン、重複ID、日時前後関係の境界条件を検証するpytestです。 |
 | `tests/runtime/test_code_interpreter_tools.py` | 管理済みresource ID制限、セッション終了、実行パラメータ、出力処理、安全なエラー応答をAWS接続なしで検証します。 |
-| `tests/runtime/test_conversation_memory.py` | session境界、履歴整形、短期イベント保存、サイズ制限、長期抽出SKIP、安全なエラー応答をfake clientで検証します。 |
+| `tests/runtime/test_conversation_memory.py` | session/user境界、利用者namespace分離、履歴・設定のサイズ制限、長期抽出切り替え、安全なエラー応答をfake clientで検証します。 |
 | `tests/approval_workflow/test_lambda_function.py` | 承認要求、状態取得、承認、却下、二重決定拒否、安全なエラー応答をAWS接続なしで検証します。 |
 | `tests/tools/test_business_tools.py` | 5ツールのGateway Lambda契約、架空データ分析、未承認拒否、承認後改変拒否、冪等なタスク登録を検証します。 |
 | `tests/tools/test_aws_adapters.py` | AWSへ接続せず、fake S3/DynamoDBでデータ読込、承認整合性、監査履歴、冪等性を検証します。 |
@@ -313,9 +313,9 @@ FoundationとRuntimeの初期構築、および`PROD` Endpointの動作確認は
 
 S3、DynamoDB、Gateway、読み取り／書き込みLambda、承認バックエンドLambdaは2026-07-22にdeploy済みです。Outputsには`ApprovalWorkflowFunctionName`と`ApprovalWorkflowFunctionArn`も含まれます。承認要求・状態取得・承認・DynamoDB監査履歴の実環境テストも完了しています。環境固有OutputsはGit管理対象外の`config/tools-outputs.json`へ保存します。
 
-### 短期Memory基盤の追加
+### 短期Memoryと利用者別長期Memory
 
-`BizFlowAgentMemoryStack`はFoundation、Tools、通常のRuntime更新から分離しています。`enableMemory=true`の場合だけ30日保持の短期AgentCore MemoryとRuntime用最小権限を定義します。2026-07-22にStackをAWSへdeployし、環境固有OutputsをGit管理対象外の`config/memory-outputs.json`へ保存しました。Memory IDはRuntime Version 6へ設定済みです。
+`BizFlowAgentMemoryStack`はFoundation、Tools、通常のRuntime更新から分離しています。30日保持の短期AgentCore MemoryはAWSへ反映済みです。現在のソースは、`enableMemory=true`の場合にCognito利用者別のUser Preference strategyとnamespace限定取得権限も定義します。この追加分はAWS反映前です。
 
 ### 通常更新
 
@@ -329,6 +329,7 @@ S3、DynamoDB、Gateway、読み取り／書き込みLambda、承認バックエ
    - `BIZFLOW_GATEWAY_URL=<Tools Stack OutputsのGateway URL>`（`-EnableReadTools`指定時だけ）
    - `BIZFLOW_CODE_INTERPRETER_ID=aws.codeinterpreter.v1`（`-EnableCodeInterpreter`指定時だけ）
    - `BIZFLOW_MEMORY_ID=<Memory Stack OutputsのMemory ID>`（`-EnableMemory`指定時だけ）
+   - `BIZFLOW_MEMORY_USER_PREFERENCE_NAMESPACE_TEMPLATE=/users/{actorId}/preferences/`（`-EnableMemory`指定時だけ）
 3. `READY` 待機
 4. 明示確認後に`PROD` Endpointを切り替え
 5. 通常スモークテスト、ランダムなSHA-256課題を使ったCode Interpreterスモークテスト、同じsession IDを使ったMemory保存・再取得スモークテスト
@@ -432,7 +433,7 @@ docker run --rm --platform linux/arm64 `
   -MemoryConfigPath .\config\memory-outputs.json
 ```
 
-`ModelId`は採用済みのJP地理推論profileを明示します。`-EnableCodeInterpreter`はRuntime環境変数へ`BIZFLOW_CODE_INTERPRETER_ID=aws.codeinterpreter.v1`、`-EnableMemory`は`BIZFLOW_MEMORY_ID`を追加します。dry-runではGateway、Code Interpreter、Memoryの有効状態と設定値を表示します。Memory Stackのdeployとworktreeのコミット後、同じ引数へ`-Execute`を追加した場合だけイメージpushとRuntime更新を行います。具体的な確認順序は [`docs/deployment.md`](docs/deployment.md) と [`docs/memory.md`](docs/memory.md) に記載しています。
+`ModelId`は採用済みのJP地理推論profileを明示します。`-EnableCodeInterpreter`はRuntime環境変数へ`BIZFLOW_CODE_INTERPRETER_ID=aws.codeinterpreter.v1`、`-EnableMemory`はMemory IDとUser Preference namespace templateを追加します。dry-runではGateway、Code Interpreter、Memory strategyと設定値を表示します。Memory Stackのdeployとworktreeのコミット後、同じ引数へ`-Execute`を追加した場合だけイメージpushとRuntime更新を行います。具体的な確認順序は [`docs/deployment.md`](docs/deployment.md) と [`docs/memory.md`](docs/memory.md) に記載しています。
 
 公開スクリプトは通常のRuntime確認とCode InterpreterのSHA-256検算に加え、Memory有効時は同一session IDの2回目の呼び出しで、プロンプトに含めていない検証markerを再回答できることを確認します。成功時だけデプロイ記録の`memorySmokeTest`を`PASSED`にします。
 

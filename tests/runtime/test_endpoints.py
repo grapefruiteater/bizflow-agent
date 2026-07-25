@@ -69,14 +69,23 @@ def test_invocations_loads_and_saves_optional_session_memory() -> None:
     class FakeMemoryContext:
         prompt = "Memory-enriched prompt"
         turn_count = 2
+        preference_count = 1
+        user_scoped = True
 
     class FakeMemory:
-        def __init__(self) -> None:
-            self.loaded: list[tuple[str, str]] = []
-            self.saved: list[tuple[str, str, str]] = []
+        user_preference_namespace_template = "/users/{actorId}/preferences/"
 
-        def load_context(self, prompt: str, session_id: str) -> FakeMemoryContext:
-            self.loaded.append((prompt, session_id))
+        def __init__(self) -> None:
+            self.loaded: list[tuple[str, str, str | None]] = []
+            self.saved: list[tuple[str, str, str, str | None]] = []
+
+        def load_context(
+            self,
+            prompt: str,
+            session_id: str,
+            runtime_user_id: str | None = None,
+        ) -> FakeMemoryContext:
+            self.loaded.append((prompt, session_id, runtime_user_id))
             return FakeMemoryContext()
 
         def save_turn(
@@ -84,8 +93,9 @@ def test_invocations_loads_and_saves_optional_session_memory() -> None:
             session_id: str,
             prompt: str,
             response: str,
+            runtime_user_id: str | None = None,
         ) -> None:
-            self.saved.append((session_id, prompt, response))
+            self.saved.append((session_id, prompt, response, runtime_user_id))
 
     class CapturingAnalyzer:
         def __init__(self) -> None:
@@ -96,6 +106,7 @@ def test_invocations_loads_and_saves_optional_session_memory() -> None:
             return AgentAnalysis(response="remembered response")
 
     session_id = "11111111-2222-3333-4444-555555555555"
+    runtime_user_id = f"bizflow-user-{'a' * 64}"
     memory = FakeMemory()
     analyzer = CapturingAnalyzer()
     runtime_module._ANALYZER = analyzer
@@ -104,17 +115,25 @@ def test_invocations_loads_and_saves_optional_session_memory() -> None:
     response = client.post(
         "/invocations",
         json={"prompt": "remember this"},
-        headers={"X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": session_id},
+        headers={
+            "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": session_id,
+            "X-Amzn-Bedrock-AgentCore-Runtime-User-Id": runtime_user_id,
+        },
     )
 
     assert response.status_code == 200
     assert analyzer.prompt == "Memory-enriched prompt"
-    assert memory.loaded == [("remember this", session_id)]
-    assert memory.saved == [(session_id, "remember this", "remembered response")]
+    assert memory.loaded == [("remember this", session_id, runtime_user_id)]
+    assert memory.saved == [
+        (session_id, "remember this", "remembered response", runtime_user_id)
+    ]
     assert response.json()["memory"] == {
         "enabled": True,
         "session_available": True,
+        "user_scoped": True,
         "context_turns": 2,
+        "preference_records": 1,
+        "long_term_extraction_enabled": True,
         "event_stored": True,
         "degraded": False,
     }
@@ -123,10 +142,23 @@ def test_invocations_loads_and_saves_optional_session_memory() -> None:
 
 def test_invocations_reports_enabled_memory_without_runtime_session() -> None:
     class UnusedMemory:
-        def load_context(self, _prompt: str, _session_id: str) -> None:
+        user_preference_namespace_template = "/users/{actorId}/preferences/"
+
+        def load_context(
+            self,
+            _prompt: str,
+            _session_id: str,
+            _runtime_user_id: str | None = None,
+        ) -> None:
             raise AssertionError("memory must not be read without a session")
 
-        def save_turn(self, _session_id: str, _prompt: str, _response: str) -> None:
+        def save_turn(
+            self,
+            _session_id: str,
+            _prompt: str,
+            _response: str,
+            _runtime_user_id: str | None = None,
+        ) -> None:
             raise AssertionError("memory must not be written without a session")
 
     runtime_module._MEMORY_PROVIDER = lambda: UnusedMemory()
@@ -137,7 +169,10 @@ def test_invocations_reports_enabled_memory_without_runtime_session() -> None:
     assert response.json()["memory"] == {
         "enabled": True,
         "session_available": False,
+        "user_scoped": False,
         "context_turns": 0,
+        "preference_records": 0,
+        "long_term_extraction_enabled": False,
         "event_stored": False,
         "degraded": False,
     }
@@ -145,10 +180,23 @@ def test_invocations_reports_enabled_memory_without_runtime_session() -> None:
 
 def test_invocations_fail_open_when_memory_is_unavailable() -> None:
     class BrokenMemory:
-        def load_context(self, _prompt: str, _session_id: str) -> None:
+        user_preference_namespace_template = "/users/{actorId}/preferences/"
+
+        def load_context(
+            self,
+            _prompt: str,
+            _session_id: str,
+            _runtime_user_id: str | None = None,
+        ) -> None:
             raise runtime_module.MemoryOperationError("sanitized")
 
-        def save_turn(self, _session_id: str, _prompt: str, _response: str) -> None:
+        def save_turn(
+            self,
+            _session_id: str,
+            _prompt: str,
+            _response: str,
+            _runtime_user_id: str | None = None,
+        ) -> None:
             raise runtime_module.MemoryOperationError("sanitized")
 
     runtime_module._MEMORY_PROVIDER = lambda: BrokenMemory()
@@ -167,10 +215,30 @@ def test_invocations_fail_open_when_memory_is_unavailable() -> None:
     assert response.json()["memory"] == {
         "enabled": True,
         "session_available": True,
+        "user_scoped": False,
         "context_turns": 0,
+        "preference_records": 0,
+        "long_term_extraction_enabled": False,
         "event_stored": False,
         "degraded": True,
     }
+
+
+def test_invocations_rejects_an_untrusted_runtime_user_id() -> None:
+    response = client.post(
+        "/invocations",
+        json={"prompt": "hello"},
+        headers={
+            "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": (
+                "11111111-2222-3333-4444-555555555555"
+            ),
+            "X-Amzn-Bedrock-AgentCore-Runtime-User-Id": "raw-cognito-sub",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "The Runtime user ID has an invalid format."
+    assert "raw-cognito-sub" not in response.text
 
 
 def test_invocations_analyzes_structured_business_data() -> None:
@@ -336,7 +404,7 @@ def test_invocations_returns_503_when_model_configuration_is_missing() -> None:
 
 
 def test_invocations_hides_unhandled_errors(monkeypatch) -> None:
-    def raise_unexpected_error(_payload, _session_id):
+    def raise_unexpected_error(_payload, _session_id, _runtime_user_id):
         raise RuntimeError("sensitive internal detail")
 
     monkeypatch.setattr(runtime_module, "handle_invocation", raise_unexpected_error)

@@ -2,100 +2,155 @@
 
 ## 現在の状態
 
-AgentCore Memoryを使った同一Runtimeセッション内の短期会話記憶について、Runtimeソース、専用CDK Stack、公開設定、自動スモークテスト、ローカルテストを実装済みです。2026-07-22に`BizFlowAgentMemoryStack`をAWSへdeployし、30日保持のMemory、service role、Runtime用最小権限、Outputsの作成を確認しました。Memory IDを設定したRuntime Version 6を`PROD`へ反映し、同じRuntime session IDを使った2ターンの保存・再取得スモークテストも成功しています。
+同一Runtime session内の短期会話MemoryはAWSへ反映済みで、2ターンの保存・再取得まで確認済みです。
 
-現在は短期Memoryだけを使用し、長期Memory strategyは作成しません。Cognitoによる信頼済み利用者IDがない段階で、リクエスト本文の`actor_id`や`session_id`を信用して別セッションの記憶を取得しないためです。
+次の更新として、Cognitoで認証した利用者ごとの長期設定Memoryをローカル実装しました。Runtime、BFF、CDK、PowerShell、テストの変更は完了していますが、User Preference strategy、Runtime更新、Web更新はまだAWSへ反映していません。
 
-## セキュリティ境界
+| 機能 | 状態 |
+|---|---|
+| session単位の短期会話 | AWSで検証済み |
+| Cognito利用者の信頼境界 | ローカル実装・検証済み |
+| User Preference strategy | CDK差分確認前 |
+| Runtimeの長期Memory取得・抽出 | ローカル実装・検証済み |
+| Webからの利用者別E2E | AWS反映後に確認 |
 
-- Memoryの`sessionId`には、AgentCoreがHTTPヘッダー`X-Amzn-Bedrock-AgentCore-Runtime-Session-Id`で渡した値だけを使用する。
-- リクエストJSON本文の`session_id`、`actor_id`、`context`はMemoryの識別子に使用しない。
-- Cognito導入前の`actorId`は`bizflow-session/<Runtime session ID>`とし、セッションをまたぐ共有を禁止する。
-- 過去の会話は信頼されないデータとして現在の依頼と分離し、履歴内の命令へ従わないようモデルへ明示する。
-- 最大5ターン、合計12,000文字までをモデルへ渡す。
-- 保存する利用者メッセージと応答はそれぞれ最大8,000文字に制限する。
-- Memory障害時は業務分析を継続し、応答の`memory.degraded=true`とCloudWatch Logsで通知する。
-- Runtimeロールには対象Memory ARNへの`CreateEvent`と`ListEvents`だけを許可する。
-- `DeleteEvent`、長期Memory取得、Memory管理権限はRuntimeへ許可しない。
+## IDと権限の境界
 
-## 処理フロー
+Web利用時の識別子は次の経路で決めます。
 
 ```text
-POST /invocations + Runtime session ID header
+Cognito access token + ALB identity
+  ↓ BFFで署名、User Pool、app client、sub一致を検証
+cognito:<sub>
+  ↓ SHA-256（生のsubはRuntimeへ渡さない）
+bizflow-user-<64桁hex>
+  ↓ InvokeAgentRuntime.runtimeUserId
+X-Amzn-Bedrock-AgentCore-Runtime-User-Id
   ↓
-AgentCore Memory / ListEvents
-  ↓ 最大5ターンの短期履歴
-現在の依頼と分離してStrands Agentへ渡す
-  ↓
-Gateway・Code Interpreter・Nova 2 Liteによる読み取り専用分析
-  ↓
-AgentCore Memory / CreateEvent
-  ├─ USER: 元の依頼だけを保存
-  └─ ASSISTANT: 最終応答を保存
+AgentCore Memory actorId
 ```
 
-構造化`business_data`の全内容や、モデルへ渡した内部プロンプトは保存しません。元の利用者依頼と最終応答だけを会話イベントとして保存します。
+- JSON本文の`actor_id`、`user_id`、`session_id`は識別子として信用しません。
+- BFFだけに`InvokeAgentRuntimeForUser`を追加します。通常の`InvokeAgentRuntime`も引き続き必要です。
+- Runtimeは`bizflow-user-<64桁hex>`以外のuser IDを`422`で拒否します。
+- Runtime応答やログへ生のCognito `sub`、ハッシュ済みuser IDを出力しません。
+- Web以外の直接呼び出しでuser IDがない場合は、`bizflow-session/<Runtime session ID>`をactorにする従来の短期Memoryへ戻ります。この経路では長期抽出を`SKIP`します。
 
-`CreateEvent`には`extractionMode=SKIP`を指定します。イベントは短期Memoryへ保存されますが、長期Memory抽出は行いません。
+これは、Cognitoを検証するBFFが利用者IDをAgentCoreへ委任する構成です。AgentCore Runtime自身がCognito tokenを再検証する構成ではありません。
 
-## AWSリソース
+## 短期Memoryと長期Memory
 
-`BizFlowAgentMemoryStack`は次を作成します。
+### 短期会話
 
-- `BizFlowMemory_<environment>`というAgentCore Memory
-- 短期イベント保持期間30日
-- Memory service role
-- 既存Runtime実行ロールへ付ける対象Memory限定IAM Policy
-- `AgentMemoryId`、`AgentMemoryArn`、`AgentMemoryEventExpiryDays` Outputs
+- `sessionId`: AgentCoreのRuntime session IDヘッダー
+- `actorId`: Webではハッシュ済み利用者ID、直接呼び出しではsession限定actor
+- 最大5ターン
+- モデルへ渡す履歴は合計12,000文字まで
+- 保存する利用者メッセージと応答は各8,000文字まで
 
-Memoryには`RETAIN` RemovalPolicyを設定します。Stack削除時も会話イベントを含むMemoryを自動削除しません。
+### 長期利用者設定
 
-Tools StackやFoundation StackへのCloudFormation依存は作りません。既存RuntimeロールARNは`config/cdk-outputs.json`から読み込み、Memory Stack内でimportします。
+- strategy: `USER_PREFERENCE`
+- namespace template: `/users/{actorId}/preferences/`
+- 取得件数: 最大3件
+- 1件2,000文字、合計4,000文字まで
+- 取得した内容は信頼されない参考情報として現在の依頼と分離
+- 検索queryには現在の依頼を使用
 
-## Runtime設定
+認証済みWeb呼び出しの`CreateEvent`では`extractionMode`を省略し、User Preference strategyによる非同期抽出を有効にします。user IDがない直接呼び出しでは`extractionMode=SKIP`を指定します。
 
-Memory StackのOutputsはGit管理対象外の`config/memory-outputs.json`へ保存します。公開時に次を指定します。
+抽出は非同期で、保存直後には検索できないことがあります。また、strategyが`ACTIVE`になる前の既存イベントは自動抽出されません。
+
+会社共有Memoryはまだ追加しません。現在のCognito tokenには信頼できるtenant/company claimがないためです。将来`custom:tenant_id`などを検証できるようになってから、利用者namespaceとは別のIAM条件とnamespaceで設計します。
+
+## Runtime処理
 
 ```text
--EnableMemory
--MemoryConfigPath .\config\memory-outputs.json
+POST /invocations
+  + Runtime session ID
+  + optional Runtime user ID
+  ↓
+ListEvents(actorId, sessionId)
+  + user IDがある場合だけRetrieveMemoryRecords
+  ↓
+<short_term_memory> と <long_term_user_preferences> に分離
+  ↓
+現在の依頼とともに読み取り専用Agentへ渡す
+  ↓
+CreateEvent
+  ├─ trusted user: 長期抽出を有効化
+  └─ session fallback: extractionMode=SKIP
 ```
 
-公開スクリプトはMemory ARNのAccountとRegionをECRおよび`AWS_REGION`と照合し、正常な場合だけ次のRuntime環境変数を追加します。
+Memory障害時は業務分析を継続し、`memory.degraded=true`を返します。構造化`business_data`全体や内部プロンプトは保存せず、元の利用者依頼と最終応答だけをイベントへ保存します。
 
-```text
-BIZFLOW_MEMORY_ID=<AgentMemoryId>
-```
-
-各応答にはMemory有効時だけ次の状態を追加します。
+Runtime応答の例です。
 
 ```json
 {
   "memory": {
     "enabled": true,
     "session_available": true,
+    "user_scoped": true,
     "context_turns": 1,
+    "preference_records": 2,
+    "long_term_extraction_enabled": true,
     "event_stored": true,
     "degraded": false
   }
 }
 ```
 
-`write_operations_performed=false`は業務システムへの書き込みがないことを表します。短期会話イベントの保存有無は`memory.event_stored`で別に報告します。
+## Memory Stackの変更
+
+`BizFlowAgentMemoryStack`は既存Memoryを維持したまま、次を追加・更新します。
+
+- `BizFlowUserPreference` strategy
+- `/users/{actorId}/preferences/` namespace template
+- Runtimeロールの`RetrieveMemoryRecords`
+- `bedrock-agentcore:namespace=/users/*/preferences/`というIAM条件
+- namespace templateとstrategy typeのOutputs
+
+`CreateEvent`と`ListEvents`は対象Memory ARNだけに限定します。`DeleteEvent`、`DeleteMemoryRecord`、`UpdateMemoryRecord`、Memory管理権限はRuntimeへ付与しません。Memoryには`RETAIN` RemovalPolicyを維持します。
+
+Outputsは次の形式になります。
+
+```json
+{
+  "AgentMemoryId": "BizFlowMemory_dev-...",
+  "AgentMemoryArn": "arn:aws:bedrock-agentcore:...",
+  "AgentMemoryEventExpiryDays": "30",
+  "AgentMemoryUserPreferenceNamespaceTemplate": "/users/{actorId}/preferences/",
+  "AgentMemoryLongTermStrategyType": "USER_PREFERENCE"
+}
+```
+
+公開スクリプトは新しい2つのOutputも検証し、Runtimeへ次を設定します。
+
+```text
+BIZFLOW_MEMORY_ID=<AgentMemoryId>
+BIZFLOW_MEMORY_USER_PREFERENCE_NAMESPACE_TEMPLATE=/users/{actorId}/preferences/
+```
+
+## ローカル検証
+
+AWSへ接続しないテストです。
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest .\tests\runtime -q
+npm test -- --runInBand
+npm --prefix web test
+npm --prefix web run typecheck
+npm --prefix web run build
+```
+
+`tests/runtime/test_conversation_memory.py`では、利用者namespace分離、取得件数と文字数制限、未検証IDの拒否、user有無による長期抽出の切り替えをfake clientで確認します。
 
 ## AWS反映順序
 
-1. 完了: ソース、文書、ローカルテストを実装する。
-2. 完了: `BizFlowAgentMemoryStack`のCDK diffを確認する。
-3. 完了: Memory Stackをdeployし、Outputsを`config/memory-outputs.json`へ保存する。
-4. 完了: 変更をGitへコミットし、worktreeをcleanにする。
-5. 完了: `publish-agentcore.ps1`を`-EnableReadTools -EnableCodeInterpreter -EnableMemory`付きでdry-runする。
-6. 完了: `-Execute`でRuntime Version 6を作成する。
-7. 完了: `READY`後、明示確認して`PROD`をVersion 6へ切り替える。
-8. 完了: 同じRuntime session IDを使う2ターンスモークテストで保存と再取得を確認する。
-9. 完了: デプロイ記録で通常・Code Interpreter・Memoryスモークテストがすべて`PASSED`であることを確認する。
+以下はユーザーが差分を確認して実行する手順です。自動では実行しません。
 
-差分確認ではMemory Stackだけを指定します。
+### 1. Memory Stack
 
 ```powershell
 $AwsProfile = "<SSOプロファイル名>"
@@ -103,74 +158,88 @@ $AwsProfile = "<SSOプロファイル名>"
 npx cdk diff BizFlowAgentMemoryStack `
   --context "environment=dev" `
   --context "enableMemory=true" `
+  --context "runtimeConfigPath=config/cdk-outputs.json" `
   --profile $AwsProfile
 ```
 
-期待する差分は、新しいMemory、Memory service role、既存Runtimeロールへ付ける`UseBizFlowShortTermMemory` Policy、3 Outputsです。Foundation、Runtime、Tools、ECR、Endpoint、既存Cross-Stack Exportの変更が表示された場合はdeployしません。
+期待する主な差分は、既存Memoryへの`UserPreferenceMemoryStrategy`追加、Runtime IAM Policyへのnamespace限定`RetrieveMemoryRecords`追加、2つのOutput追加です。Memoryの置換、Foundation/Runtime/Toolsの変更、既存リソース削除が表示された場合はdeployしません。
 
-差分確認後、ユーザーの明示判断で次を実行します。
+差分が期待どおりなら、明示判断後にMemory Stackだけを更新します。
 
 ```powershell
 npx cdk deploy BizFlowAgentMemoryStack `
   --context "environment=dev" `
   --context "enableMemory=true" `
+  --context "runtimeConfigPath=config/cdk-outputs.json" `
   --profile $AwsProfile `
   --outputs-file .\config\memory-outputs.json
 ```
 
-Memory Stackは既存RuntimeロールARNを`config/cdk-outputs.json`から読み取ります。Runtime StackをCDKアプリへ含める`agentImageDigest`は不要で、通常RuntimeやEndpointを更新しません。
+コンソールでMemoryと`BizFlowUserPreference` strategyが`ACTIVE`になったことを確認してから次へ進みます。
 
-## 自動スモークテスト
+### 2. Runtime
 
-公開スクリプトはMemory有効時に次を自動実行します。
-
-1. ランダムなRuntime session IDを1つ作る。
-2. 1回目の呼び出しでGit SHAとRuntime Versionを含む検証markerを記憶させる。
-3. 応答が`memory.event_stored=true`かつ`degraded=false`であることを確認する。
-4. 同じsession IDの2回目の呼び出しではmarkerをプロンプトへ含めず、前のmarkerを回答させる。
-5. `memory.context_turns>=1`かつ応答内のmarkerが完全一致することを確認する。
-
-成功時、デプロイ記録は次を含みます。
-
-```json
-{
-  "memoryEnabled": true,
-  "memorySmokeTest": "PASSED"
-}
-```
-
-CloudWatch Logsでは次を確認できます。
-
-```text
-Loading short-term memory session_id=...
-Loaded short-term memory session_id=... turns=1
-Saving short-term memory session_id=...
-Short-term memory saved session_id=...
-```
-
-## ローカル検証
+変更をGitへcommitしてworktreeをcleanにした後、まずdry-runします。
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest .\tests\runtime\test_conversation_memory.py -q
-npm run build
-npm test -- --runInBand
+.\scripts\publish-agentcore.ps1 `
+  -AWS_PROFILE $AwsProfile `
+  -AWS_REGION ap-northeast-1 `
+  -ModelId jp.amazon.nova-2-lite-v1:0 `
+  -ConfigPath .\config\cdk-outputs.json `
+  -StackName BizFlowAgentRuntimeStack `
+  -EnableReadTools `
+  -ToolsConfigPath .\config\tools-outputs.json `
+  -EnableCodeInterpreter `
+  -EnableMemory `
+  -MemoryConfigPath .\config\memory-outputs.json
 ```
 
-Pythonテストはfake Memory client、CDKテストはCloudFormation template assertionsを使うためAWS APIを呼び出しません。
+dry-runでMemory ID、`USER_PREFERENCE`、namespace templateが表示されることを確認します。問題がなければ、同じコマンドへ`-Execute`を追加し、Runtimeが`READY`になった後だけ`PROD`を更新します。
 
-## 今後の拡張
+公開時の自動Memoryテストは、user IDを渡さない従来のsession内2ターンテストです。これにより直接呼び出しのfallbackを確認します。長期抽出は非同期なので、Web E2Eで別に確認します。
 
-現在はポートフォリオの会話継続を安全に示す最小構成です。CognitoとBFFで利用者と会社を認証できた後、次を追加します。
+### 3. Web Service
 
-- Cognito `sub`と会社IDから信頼済み`actorId`を生成する。
-- user preferenceまたはsemantic strategyを追加する。
-- `/actors/{actorId}/`で終わるnamespaceを使い、利用者間の長期Memoryを分離する。
-- 保存対象、保持期間、削除要求、監査手順を画面と運用へ追加する。
+新しいWebイメージを同じGit SHAでARM64 build/pushし、digestを取得します。そのdigestでService差分を確認します。
+
+```powershell
+npx cdk diff BizFlowWebServiceStack `
+  --context "environment=dev" `
+  --context "enableWebService=true" `
+  --context "webImageDigest=$WebImageDigest" `
+  --context "webFoundationConfigPath=config/web-foundation-outputs.json" `
+  --context "runtimeConfigPath=config/cdk-outputs.json" `
+  --context "toolsConfigPath=config/tools-outputs.json" `
+  --profile $AwsProfile
+```
+
+期待する差分は、Web Task Roleへの`InvokeAgentRuntimeForUser`追加と、新しいdigestを使うTask Definition/Service更新です。権限のResourceは既存Runtime ARNと`PROD` Endpoint ARNだけで、`*`にしません。
+
+### 4. Web E2E
+
+1. Cognito利用者でログインする。
+2. 「今後の回答は日本語を優先してください」のように明示的な設定を伝えて分析する。
+3. 応答の表示が`設定 0件`でも、`event_stored=true`相当なら最初の保存は成功です。
+4. strategyの非同期抽出を待つ。
+5. ブラウザ開発者ツールで次を実行し、同じ利用者の新しいconversation IDへ切り替える。
+
+```javascript
+localStorage.removeItem("bizflow-conversation-id");
+location.reload();
+```
+
+6. 「私の回答言語の設定を教えてください」と依頼する。
+7. 画面が`設定 1件`以上を表示し、日本語優先を回答することを確認する。
+8. CloudWatch Logsで`user_scoped=True`、`extraction=ENABLED`、`preferences=1`以上を確認する。ログへuser ID自体が出ていないことも確認する。
+9. 別のCognito利用者では同じ設定を取得できないことを確認する。
+
+長期MemoryだけをCLIで確認する場合、`smoke-test-agentcore.ps1`は`-RuntimeUserId bizflow-user-<64桁hex> -RequireMemory`を受け取れます。ただし、この値は任意に作らず、BFFと同じ導出規則で作った検証用IDだけを使います。
 
 ## AWS公式資料
 
-- [AgentCore Memoryを始める](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory-get-started.html)
-- [短期MemoryのCreateEvent](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/short-term-create-event.html)
-- [短期MemoryのListEvents](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/short-term-list-events.html)
-- [Memoryのactor・session構成](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory-organization.html)
-- [AWS CDK MemoryProps](https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_bedrockagentcore.MemoryProps.html)
+- [InvokeAgentRuntime API](https://docs.aws.amazon.com/bedrock-agentcore/latest/APIReference/API_InvokeAgentRuntime.html)
+- [Runtime security best practices](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-security-best-practices.html)
+- [Long-term Memoryを有効化する](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/long-term-enabling-long-term-memory.html)
+- [長期Memoryの保存と取得](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/long-term-saving-and-retrieving-insights.html)
+- [Memoryのactor・session・namespace構成](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory-organization.html)

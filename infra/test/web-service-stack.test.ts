@@ -92,7 +92,10 @@ describe("BizFlowWebServiceStack", () => {
         Statement: Match.arrayWith([
           Match.objectLike({
             Sid: "InvokeBizFlowAgentRuntime",
-            Action: "bedrock-agentcore:InvokeAgentRuntime",
+            Action: [
+              "bedrock-agentcore:InvokeAgentRuntime",
+              "bedrock-agentcore:InvokeAgentRuntimeForUser",
+            ],
             Effect: "Allow",
             Resource: Match.arrayWith([
               "arn:aws:bedrock-agentcore:ap-northeast-1:111122223333:runtime/BizFlowAgent_dev-example",

@@ -58,7 +58,14 @@ export function requireAgentResult(value: unknown): AgentResult {
     const memoryObject = requireAgentObject(memoryValue);
     memory = {
       enabled: optionalBoolean(memoryObject.enabled),
+      user_scoped: optionalBoolean(memoryObject.user_scoped),
       context_turns: optionalNonNegativeInteger(memoryObject.context_turns),
+      preference_records: optionalNonNegativeInteger(
+        memoryObject.preference_records,
+      ),
+      long_term_extraction_enabled: optionalBoolean(
+        memoryObject.long_term_extraction_enabled,
+      ),
       event_stored: optionalBoolean(memoryObject.event_stored),
       degraded: optionalBoolean(memoryObject.degraded),
     };

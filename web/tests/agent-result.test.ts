@@ -19,7 +19,10 @@ const validResult = {
   write_operations_performed: false,
   memory: {
     enabled: true,
+    user_scoped: true,
     context_turns: 2,
+    preference_records: 1,
+    long_term_extraction_enabled: true,
     event_stored: true,
     degraded: false,
   },
@@ -38,6 +41,8 @@ describe("AgentCore structured result boundary", () => {
       rule_ids: ["RULE-001", "RULE-002"],
     });
     expect(result.memory?.context_turns).toBe(2);
+    expect(result.memory?.preference_records).toBe(1);
+    expect(result.memory?.user_scoped).toBe(true);
   });
 
   it("rejects a response that claims a write operation", () => {

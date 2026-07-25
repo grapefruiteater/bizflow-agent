@@ -4,7 +4,7 @@
 
 開いている `bizflow-agent` リポジトリをそのまま使用します。スクリプトは自身の配置場所からリポジトリルートを解決するため、絶対パスをソースコードへ埋め込みません。
 
-この文書の中心は既存AgentCore Runtimeのコンテナ公開です。ポートフォリオ用のS3、DynamoDB、Lambda、AgentCore Gateway、承認バックエンド、Code Interpreter、短期Memoryは2026-07-22にAWSへdeploy・検証済みです。Web FoundationとWeb Serviceもdeploy済みで、2026-07-24にCognitoログインから分析、承認、タスク登録、監査履歴までのAWS E2Eを確認しました。ツール基盤は [`tools-infrastructure.md`](tools-infrastructure.md)、Code Interpreterは [`code-interpreter.md`](code-interpreter.md)、Memoryは [`memory.md`](memory.md)、Webは [`web-application.md`](web-application.md)、全体の実装順序は [`portfolio-mvp.md`](portfolio-mvp.md) を参照してください。
+この文書の中心は既存AgentCore Runtimeのコンテナ公開です。ポートフォリオ用のS3、DynamoDB、Lambda、AgentCore Gateway、承認バックエンド、Code Interpreter、短期MemoryはAWSへdeploy・検証済みです。Web FoundationとWeb Serviceもdeploy済みで、2026-07-24にCognitoログインから構造化提案のカード反映、承認、タスク登録、監査履歴までのAWS E2Eを確認しました。Cognito利用者別User Preference Memoryはローカル実装・検証済みで、Memory Stack、Runtime、WebのAWS更新前です。ツール基盤は [`tools-infrastructure.md`](tools-infrastructure.md)、Code Interpreterは [`code-interpreter.md`](code-interpreter.md)、Memoryは [`memory.md`](memory.md)、Webは [`web-application.md`](web-application.md)、全体の実装順序は [`portfolio-mvp.md`](portfolio-mvp.md) を参照してください。
 
 開発・デプロイ環境は次の構成です。
 
@@ -24,7 +24,7 @@
 
 ### 現在の状態
 
-CDKソースは `infra` に実装済みです。AgentCore Foundation、Runtime、サービス管理`DEFAULT`、明示昇格用`PROD` Endpoint、Tools、Memory、Web Foundation、Web Serviceのデプロイは完了しています。`PROD`へのモデル応答とWebの承認フローもユーザーがAWS環境で確認済みです。採用モデルは `jp.amazon.nova-2-lite-v1:0` です。構造化提案と承認カード自動反映はローカル実装・検証済みで、次のRuntime/Web更新対象です。
+CDKソースは `infra` に実装済みです。AgentCore Foundation、Runtime、サービス管理`DEFAULT`、明示昇格用`PROD` Endpoint、Tools、短期Memory、Web Foundation、Web Serviceのデプロイは完了しています。`PROD`へのモデル応答、構造化提案、Webの承認フローもユーザーがAWS環境で確認済みです。採用モデルは `jp.amazon.nova-2-lite-v1:0` です。次のAWS更新対象は利用者別User Preference Memoryです。
 
 `config/cdk-outputs.json` はBizFlow専用スタックの実環境Outputsです。環境固有情報を含むためGit管理せず、Runtime Stackをdeployしたときだけ更新します。形式例は `config/agentcore.example.json` に保持します。
 
@@ -71,11 +71,12 @@ CDKソースは `infra` に実装済みです。AgentCore Foundation、Runtime�
 #### `BizFlowAgentMemoryStack`（明示指定時のみ）
 
 - 30日保持のsession単位AgentCore短期Memory
+- Cognito検証済み利用者を分離するUser Preference strategy
 - Memory service role
-- 既存Runtimeロールへ対象Memoryの`CreateEvent`と`ListEvents`だけを許可するIAM Policy
-- Runtime公開用のMemory IDとARN Outputs
+- 既存Runtimeロールへ対象Memoryの`CreateEvent`、`ListEvents`とnamespace限定`RetrieveMemoryRecords`を許可するIAM Policy
+- Runtime公開用のMemory ID、ARN、strategy、namespace Outputs
 
-`enableMemory=true`の場合だけCDKアプリへ追加されます。既存RuntimeロールをOutputs由来のARNでimportし、FoundationやTools Stackへのcross-stack参照を作りません。長期Memory strategyはCognito導入後まで作成しません。詳細は [`memory.md`](memory.md) を参照してください。
+`enableMemory=true`の場合だけCDKアプリへ追加されます。既存RuntimeロールをOutputs由来のARNでimportし、FoundationやTools Stackへのcross-stack参照を作りません。長期Memory追加分はまだAWS反映前です。詳細は [`memory.md`](memory.md) を参照してください。
 
 #### `BizFlowWebFoundationStack` / `BizFlowWebServiceStack`（明示指定時のみ）
 
@@ -507,7 +508,7 @@ dry-runでも接続先、ECR設定、同一Git SHAタグの有無を確定する
 - `networkConfiguration` が不正
 - `-EnableReadTools`指定時にTools Outputsまたはリージョン一致するGateway URLがない
 - `-EnableCodeInterpreter`指定時に管理済みID以外の`CodeInterpreterId`が指定されている
-- `-EnableMemory`指定時にMemory Outputsがない、またはMemory ARNのAccount・Region・IDが一致しない
+- `-EnableMemory`指定時にMemory Outputsがない、Memory ARNのAccount・Region・IDが一致しない、またはUser Preference strategy/namespace Outputがない
 
 Git worktreeをcleanにするのは、SHAタグと実際のコンテナ内容を必ず一致させるためです。イメージタグには完全な40文字のGitコミットSHAを使用し、`latest` は使用しません。
 
@@ -542,7 +543,7 @@ dry-runの内容を確認した後、`-Execute` を付けます。
 6. ECRからpush済みイメージのdigestを取得する。
 7. 現在のEndpoint `liveVersion` をロールバック用に保存する。
 8. `repository@sha256:...` を `containerConfiguration.containerUri` に指定する。
-9. `BIZFLOW_MODEL_PROVIDER=bedrock`、`BIZFLOW_MODEL_ID`、`BIZFLOW_AWS_REGION`をRuntime環境変数へ設定し、明示スイッチに応じて`BIZFLOW_GATEWAY_URL`、`BIZFLOW_CODE_INTERPRETER_ID`、`BIZFLOW_MEMORY_ID`を追加する。
+9. `BIZFLOW_MODEL_PROVIDER=bedrock`、`BIZFLOW_MODEL_ID`、`BIZFLOW_AWS_REGION`をRuntime環境変数へ設定し、明示スイッチに応じて`BIZFLOW_GATEWAY_URL`、`BIZFLOW_CODE_INTERPRETER_ID`、`BIZFLOW_MEMORY_ID`、`BIZFLOW_MEMORY_USER_PREFERENCE_NAMESPACE_TEMPLATE`を追加する。
 10. CDK Outputs由来のrole/network設定と `metadataConfiguration.requireMMDSV2=true` で `UpdateAgentRuntime` を実行する。
 11. 新Runtimeバージョンを期限付きでポーリングする。
 12. `READY` 後、新バージョン番号の手入力を要求する。
@@ -553,7 +554,7 @@ dry-runの内容を確認した後、`-Execute` を付けます。
 17. Memory有効時は同じRuntime session IDでmarkerを保存・再取得し、応答のMemory状態も確認する。
 18. デプロイ記録とロールバックコマンドを表示する。
 
-公開スクリプトはRuntimeの環境変数マップをモデル用3項目、明示的に有効化したGateway URL、管理済みCode Interpreter ID、Memory IDで管理します。Gateway URLとMemory IDは各StackのOutputsから読み込み、Account・Regionを検証します。各スイッチを省略した更新では対応する環境変数を設定せず、従来動作を維持します。
+公開スクリプトはRuntimeの環境変数マップをモデル用3項目、明示的に有効化したGateway URL、管理済みCode Interpreter ID、Memory ID、User Preference namespaceで管理します。Gateway URLとMemory設定は各StackのOutputsから読み込み、Account・Region・strategy type・namespace形式を検証します。各スイッチを省略した更新では対応する環境変数を設定せず、従来動作を維持します。
 
 `-Execute` を指定していても、Endpoint切り替え確認で別の値または空文字を入力すると、新Runtimeバージョンの作成までで停止します。`DEFAULT`はAgentCoreにより新Versionへ自動更新されますが、本番用`PROD`は旧Versionのまま維持されます。
 

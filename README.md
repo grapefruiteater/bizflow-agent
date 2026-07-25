@@ -27,6 +27,7 @@ AWS基盤は、以前のアプリやCDKスタックで作成したリソース�
 | Web Foundation | 2026-07-23にECR、VPC、Cognito、ALB、Route 53、WAF、ECS ClusterをAWSへdeploy・確認済み |
 | Web Service / ECS Fargate | AWSへdeploy済み。Cognitoグループ認可とRuntime/Lambda呼び出し権限を修正し、承認者E2Eを検証済み |
 | 構造化提案・承認カード連携 | Runtime/Webへ反映し、AWS Web E2Eを検証済み |
+| 登録済みタスク数の永続表示 | ローカル実装済み・AWS反映前。DynamoDB GSIをBFF専用操作で集計 |
 
 現在のAgentCore Gateway公開面は読み取り専用です。モデルは`get_business_requests`、`analyze_request_data`、`search_company_rules`、`get_task_status`を選択できます。`create_business_task`はGateway schemaとtargetから削除し、Cognito認証済みWeb/BFFが承認内容を再検証した場合だけWrite Lambdaを直接呼び出します。承認されていない書き込みをモデルの判断だけで実行することはありません。
 
@@ -199,8 +200,8 @@ bizflow-agent/
 | `lambdas/business_tools/data/business_requests.csv` | 契約、障害、請求、総務、注文、申請を含む、GitHub公開可能な架空問い合わせデータです。 |
 | `lambdas/business_tools/data/company_rules.md` | 障害、期限超過、請求、契約、個人情報に関する架空の社内対応ルールです。 |
 | `lambdas/business_tools/tool-schema.json` | AgentCore GatewayのRead Lambda targetへ登録する4つの読み取りツールの入力schemaです。 |
-| `lambdas/business_tools/aws_adapters.py` | S3から合成データを読むadapterと、DynamoDBへ承認・タスク・監査イベントを永続化するadapterです。AWSクライアントはLambda環境変数がある場合だけ遅延生成します。 |
-| `lambdas/business_tools/lambda_function.py` | GatewayまたはBFFの呼び出し元を判別し、許可された処理へ振り分けるLambda handlerです。tool allow-listをfail-closedにし、書き込みLambdaではGateway contextを拒否します。 |
+| `lambdas/business_tools/aws_adapters.py` | S3から合成データを読むadapterと、DynamoDBへ承認・タスク・監査イベントを永続化するadapterです。`entity_type` GSIをページングして登録済みタスク数も取得します。AWSクライアントはLambda環境変数がある場合だけ遅延生成します。 |
+| `lambdas/business_tools/lambda_function.py` | GatewayまたはBFFの呼び出し元を判別し、許可された処理へ振り分けるLambda handlerです。全操作とGateway公開操作を別allow-listでfail-closedにし、BFF専用のダッシュボード集計とタスク登録をGatewayへ公開しません。 |
 | `lambdas/business_tools/service.py` | CSV取得、決定的集計、ルール検索、承認検証、タスク登録・状態取得、監査イベントのドメイン処理と、ローカル用adapterを実装します。 |
 
 ### 承認バックエンド
@@ -218,7 +219,7 @@ bizflow-agent/
 | `web/src/app/history/page.tsx` / `components/history-view.tsx` | 承認IDから承認内容、承認者、作成タスク、監査イベントを確認する履歴画面です。 |
 | `web/src/app/api/` | dashboard、AgentCore Runtime、承認、タスク登録、履歴、ヘルスチェックのBFF API Routesです。 |
 | `web/src/lib/auth.ts` | ALB/Cognito identity、承認者グループ、CSRF headerを検証し、actorから分離したRuntime session IDと不透明なuser IDを導出します。 |
-| `web/src/lib/backend.ts` / `contracts.ts` / `validation.ts` | AgentCore Runtimeへsession/user IDをAWS SDKの専用フィールドで渡し、3つのLambdaを呼び出します。Runtimeの構造化応答をBFF境界で検証し、承認済み提案だけを書き込み経路へ渡します。 |
+| `web/src/lib/backend.ts` / `contracts.ts` / `validation.ts` | AgentCore Runtimeへsession/user IDをAWS SDKの専用フィールドで渡し、3つのLambdaを呼び出します。Runtimeの構造化応答をBFF境界で検証し、承認済み提案だけを書き込み経路へ渡し、登録済みタスク数をRead Lambdaから取得します。 |
 | `web/src/lib/demo-backend.ts` / `demo-data.ts` | AWSへ接続せず、架空データとメモリ内承認フローを動かすローカルデモbackendです。 |
 | `web/Dockerfile` / `.dockerignore` | Next.js standalone出力を非rootユーザーで起動するFargate向けARM64対応イメージです。 |
 | `web/tests/` | 認証境界、session/user ID分離、SDKへのuser ID受け渡し、構造化応答、不正な書き込み主張の拒否、承認カード反映、未承認拒否、承認後登録、冪等性をVitestで検証します。 |
@@ -231,7 +232,7 @@ bizflow-agent/
 | `infra/lib/foundation-stack.ts` | BizFlow専用ECR、AgentCore実行IAMロール、`PUBLIC`ネットワーク設定を作成します。Bedrock権限を指定profile/modelへ限定し、AWS管理Code Interpreterにはセッション利用権限だけを付与します。 |
 | `infra/lib/memory-stack.ts` | 30日保持のAgentCore Memory、利用者別User Preference strategy、既存Runtimeロールのイベント権限とnamespace限定取得権限を定義します。 |
 | `infra/lib/runtime-stack.ts` | digest固定の初回コンテナからAgentCore Runtime、`PROD`カスタムEndpoint、Endpoint別の30日保持ロググループ、通常更新用Outputsを作成します。`DEFAULT` EndpointはRuntime作成時にAgentCoreが自動作成します。 |
-| `infra/lib/tools-stack.ts` | 合成データ用S3、承認・タスク・監査用DynamoDB、読み取り／BFF書き込みLambda、承認Lambda、読み取り専用のIAM認証AgentCore Gateway、既存RuntimeロールのOutputs importを定義します。 |
+| `infra/lib/tools-stack.ts` | 合成データ用S3、承認・タスク・監査用DynamoDB、タスク件数取得用GSI、読み取り／BFF書き込みLambda、承認Lambda、読み取り専用のIAM認証AgentCore Gateway、既存RuntimeロールのOutputs importを定義します。 |
 | `infra/lib/web-foundation-stack.ts` | Web専用ECR、VPC、ECS Cluster、Cognito、HTTPS ALB、Route 53 Alias、WAFを定義します。 |
 | `infra/lib/web-service-stack.ts` | digest固定ARM64イメージのFargate Service、最小権限Task Role、Target Group、Cognito認証Listener Ruleを定義します。 |
 | `infra/test/foundation-stack.test.ts` | ECRとIAM、およびFoundation OutputsのCloudFormation定義を検証します。 |
@@ -273,7 +274,8 @@ bizflow-agent/
 | `tests/runtime/test_conversation_memory.py` | session/user境界、利用者namespace分離、履歴・設定のサイズ制限、長期抽出切り替え、安全なエラー応答をfake clientで検証します。 |
 | `tests/approval_workflow/test_lambda_function.py` | 承認要求、状態取得、承認、却下、二重決定拒否、安全なエラー応答をAWS接続なしで検証します。 |
 | `tests/tools/test_business_tools.py` | Gatewayの読み取り4ツール、BFF専用タスク登録、架空データ分析、未承認拒否、承認後改変拒否、冪等性を検証します。 |
-| `tests/tools/test_aws_adapters.py` | AWSへ接続せず、fake S3/DynamoDBでデータ読込、承認整合性、監査履歴、冪等性を検証します。 |
+| `tests/tools/test_aws_adapters.py` | AWSへ接続せず、fake S3/DynamoDBでデータ読込、承認整合性、監査履歴、冪等性、GSIのページング件数取得を検証します。 |
+| `web/tests/dashboard-backend.test.ts` | AWS SDKをmockし、ダッシュボードがBFF専用操作から永続タスク件数を取得し、不正な件数を拒否することを検証します。 |
 | `.gitignore` | 仮想環境、Pythonキャッシュ、CDK成果物、環境別CDK Outputs、生成したデプロイ記録をGit管理対象から除外します。 |
 | `bizflow_agent_architecture.drawio` | BizFlow AgentのAWS全体構成と処理フローを示すdraw.io構成図です。 |
 | `プロンプト.txt` | 開発環境、コンテナ方式、イメージ管理、IaCと通常更新の分離方針を記録しています。 |

@@ -16,14 +16,20 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import * as s3deploy from "aws-cdk-lib/aws-s3-deployment";
 import { Construct } from "constructs";
 
-const READ_TOOL_NAMES = [
+const GATEWAY_READ_TOOL_NAMES = [
   "get_business_requests",
   "analyze_request_data",
   "search_company_rules",
   "get_task_status",
 ] as const;
+const BFF_READ_OPERATION_NAMES = ["get_dashboard_metrics"] as const;
+const READ_OPERATION_NAMES = [
+  ...GATEWAY_READ_TOOL_NAMES,
+  ...BFF_READ_OPERATION_NAMES,
+] as const;
 const BFF_WRITE_OPERATION_NAMES = ["create_business_task"] as const;
 const DATA_PREFIX = "portfolio-data";
+const WORKFLOW_ENTITY_TYPE_INDEX_NAME = "BizFlowEntityTypeIndex";
 
 export interface BizFlowAgentToolsStackProps extends StackProps {
   readonly environmentName: string;
@@ -86,19 +92,30 @@ export class BizFlowAgentToolsStack extends Stack {
       deletionProtection: true,
       removalPolicy: RemovalPolicy.RETAIN,
     });
+    this.workflowTable.addGlobalSecondaryIndex({
+      indexName: WORKFLOW_ENTITY_TYPE_INDEX_NAME,
+      partitionKey: {
+        name: "entity_type",
+        type: dynamodb.AttributeType.STRING,
+      },
+      projectionType: dynamodb.ProjectionType.KEYS_ONLY,
+    });
 
     const lambdaCode = lambda.Code.fromAsset(join(__dirname, "../../lambdas"));
     this.readToolsFunction = this.createToolFunction(
       "ReadToolsFunction",
       `bizflow-read-tools-${props.environmentName}`,
       lambdaCode,
-      READ_TOOL_NAMES,
+      READ_OPERATION_NAMES,
+      GATEWAY_READ_TOOL_NAMES,
       true,
       {
         BIZFLOW_DATA_BUCKET: this.dataBucket.bucketName,
         BIZFLOW_REQUESTS_KEY: `${DATA_PREFIX}/business_requests.csv`,
         BIZFLOW_RULES_KEY: `${DATA_PREFIX}/company_rules.md`,
         BIZFLOW_WORKFLOW_TABLE: this.workflowTable.tableName,
+        BIZFLOW_WORKFLOW_ENTITY_TYPE_INDEX:
+          WORKFLOW_ENTITY_TYPE_INDEX_NAME,
       },
     );
     this.readToolsFunction.addToRolePolicy(
@@ -112,7 +129,10 @@ export class BizFlowAgentToolsStack extends Stack {
       new iam.PolicyStatement({
         sid: "ReadWorkflowState",
         actions: ["dynamodb:GetItem", "dynamodb:Query"],
-        resources: [this.workflowTable.tableArn],
+        resources: [
+          this.workflowTable.tableArn,
+          `${this.workflowTable.tableArn}/index/${WORKFLOW_ENTITY_TYPE_INDEX_NAME}`,
+        ],
       }),
     );
 
@@ -121,6 +141,7 @@ export class BizFlowAgentToolsStack extends Stack {
       `bizflow-write-tools-${props.environmentName}`,
       lambdaCode,
       BFF_WRITE_OPERATION_NAMES,
+      [],
       false,
       {
         BIZFLOW_WORKFLOW_TABLE: this.workflowTable.tableName,
@@ -185,7 +206,7 @@ export class BizFlowAgentToolsStack extends Stack {
       description: "Read-only business request, analysis, rule, and task tools",
       lambdaFunction: this.readToolsFunction,
       toolSchema: bedrockagentcore.ToolSchema.fromInline(
-        selectTools(allTools, READ_TOOL_NAMES),
+        selectTools(allTools, GATEWAY_READ_TOOL_NAMES),
       ),
     });
     readTarget.applyRemovalPolicy(RemovalPolicy.RETAIN);
@@ -270,6 +291,7 @@ export class BizFlowAgentToolsStack extends Stack {
     functionName: string,
     code: lambda.Code,
     allowedTools: readonly string[],
+    gatewayAllowedTools: readonly string[],
     allowGatewayContext: boolean,
     environment: Record<string, string>,
   ): lambda.Function {
@@ -293,6 +315,7 @@ export class BizFlowAgentToolsStack extends Stack {
       environment: {
         ...environment,
         BIZFLOW_ALLOWED_TOOLS: allowedTools.join(","),
+        BIZFLOW_GATEWAY_ALLOWED_TOOLS: gatewayAllowedTools.join(","),
         BIZFLOW_ALLOW_GATEWAY_CONTEXT: allowGatewayContext ? "true" : "false",
       },
     });

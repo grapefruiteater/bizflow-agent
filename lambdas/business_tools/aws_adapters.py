@@ -30,6 +30,8 @@ DATA_BUCKET_ENV = "BIZFLOW_DATA_BUCKET"
 REQUESTS_KEY_ENV = "BIZFLOW_REQUESTS_KEY"
 RULES_KEY_ENV = "BIZFLOW_RULES_KEY"
 WORKFLOW_TABLE_ENV = "BIZFLOW_WORKFLOW_TABLE"
+WORKFLOW_ENTITY_TYPE_INDEX_ENV = "BIZFLOW_WORKFLOW_ENTITY_TYPE_INDEX"
+DEFAULT_WORKFLOW_ENTITY_TYPE_INDEX = "BizFlowEntityTypeIndex"
 
 
 class S3BusinessDataRepository:
@@ -78,8 +80,14 @@ class DynamoWorkflowStore:
         table: Any,
         now_factory: Callable[[], datetime] | None = None,
         event_id_factory: Callable[[], str] | None = None,
+        entity_type_index_name: str = DEFAULT_WORKFLOW_ENTITY_TYPE_INDEX,
     ) -> None:
         self.table = table
+        self.entity_type_index_name = require_text(
+            entity_type_index_name,
+            "entity_type_index_name",
+            255,
+        )
         self._now_factory = now_factory or (lambda: datetime.now(timezone.utc))
         self._event_id_factory = event_id_factory or (
             lambda: "EVT-" + uuid.uuid4().hex.upper()
@@ -222,6 +230,32 @@ class DynamoWorkflowStore:
             raise RuntimeError("DynamoDB query returned an invalid Items value.")
         return [strip_storage_fields(item) for item in items]
 
+    def count_tasks(self) -> int:
+        total = 0
+        exclusive_start_key: Mapping[str, Any] | None = None
+        while True:
+            query_arguments: dict[str, Any] = {
+                "IndexName": self.entity_type_index_name,
+                "KeyConditionExpression": "entity_type = :entity_type",
+                "ExpressionAttributeValues": {":entity_type": "TASK"},
+                "Select": "COUNT",
+            }
+            if exclusive_start_key is not None:
+                query_arguments["ExclusiveStartKey"] = dict(exclusive_start_key)
+            response = self.table.query(**query_arguments)
+            count = response.get("Count")
+            if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+                raise RuntimeError("DynamoDB task count query returned an invalid Count.")
+            total += count
+            last_evaluated_key = response.get("LastEvaluatedKey")
+            if last_evaluated_key is None or last_evaluated_key == {}:
+                return total
+            if not isinstance(last_evaluated_key, Mapping):
+                raise RuntimeError(
+                    "DynamoDB task count query returned an invalid LastEvaluatedKey."
+                )
+            exclusive_start_key = last_evaluated_key
+
     def _decide(
         self,
         approval_id: str,
@@ -339,7 +373,13 @@ def build_service_from_environment(
             )
         if table_name:
             table = boto3.resource("dynamodb").Table(table_name)
-            workflow_store = DynamoWorkflowStore(table)
+            workflow_store = DynamoWorkflowStore(
+                table,
+                entity_type_index_name=values.get(
+                    WORKFLOW_ENTITY_TYPE_INDEX_ENV,
+                    DEFAULT_WORKFLOW_ENTITY_TYPE_INDEX,
+                ),
+            )
 
     return BusinessToolsService(
         data_repository=data_repository,

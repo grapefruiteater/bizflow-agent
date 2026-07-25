@@ -72,7 +72,7 @@ Web Task Roleから3つの業務Lambdaを直接呼び出すIAM Resourceには、
 - `/api/approvals/{approvalId}/decision`: 承認または却下
 - `/api/approvals/{approvalId}/execute`: 承認ストアから提案を再取得し、同じ内容のタスクを登録
 
-AWS接続時の登録済みタスク総数は、一覧取得用index/APIをまだ追加していないため、初期表示では`0`です。現在のブラウザセッションで登録した結果は画面へ反映します。永続的な件数表示は次の改善項目です。
+AWS接続時の登録済みタスク総数を、DynamoDBの`BizFlowEntityTypeIndex`から取得するBFF専用`get_dashboard_metrics`操作を実装しました。既存タスクも`entity_type=TASK`でindexへbackfillされるため、Webの初期表示で永続件数を取得できます。Gateway schemaには追加せず、Agentへ公開する読み取りツールは4つのままです。現在はローカル実装・テスト済みで、Tools StackとWeb ServiceへのAWS反映前です。
 
 ## Agent構造化結果と承認カード
 

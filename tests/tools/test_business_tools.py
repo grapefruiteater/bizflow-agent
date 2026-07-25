@@ -38,10 +38,14 @@ def service(monkeypatch) -> BusinessToolsService:
         "BIZFLOW_ALLOWED_TOOLS",
         (
             "get_business_requests,analyze_request_data,search_company_rules,"
-            "create_business_task,get_task_status"
+            "create_business_task,get_task_status,get_dashboard_metrics"
         ),
     )
     monkeypatch.setenv("BIZFLOW_ALLOW_GATEWAY_CONTEXT", "true")
+    monkeypatch.setenv(
+        "BIZFLOW_GATEWAY_ALLOWED_TOOLS",
+        "get_business_requests,analyze_request_data,search_company_rules,get_task_status",
+    )
     return instance
 
 
@@ -218,6 +222,13 @@ def test_approved_task_is_idempotent_and_status_is_available(
         "APPROVAL_APPROVED",
         "TASK_REGISTERED",
     ]
+
+    dashboard = invoke_from_bff("get_dashboard_metrics", {})
+    assert dashboard == {
+        "ok": True,
+        "tool": "get_dashboard_metrics",
+        "data": {"registered_task_count": 1},
+    }
     assert status["data"]["history"][-1]["actor"] == "bizflow-agent"
 
 
@@ -287,6 +298,7 @@ def test_write_lambda_rejects_gateway_context_even_for_an_allowed_tool(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("BIZFLOW_ALLOWED_TOOLS", "create_business_task")
+    monkeypatch.setenv("BIZFLOW_GATEWAY_ALLOWED_TOOLS", "")
     monkeypatch.setenv("BIZFLOW_ALLOW_GATEWAY_CONTEXT", "false")
 
     result = invoke(
@@ -307,6 +319,23 @@ def test_write_lambda_rejects_gateway_context_even_for_an_allowed_tool(
             "message": (
                 "Write operations are available only through the trusted "
                 "BizFlow Web BFF."
+            ),
+        },
+    }
+
+
+def test_bff_dashboard_operation_is_not_available_through_gateway(
+    service: BusinessToolsService,
+) -> None:
+    result = invoke("get_dashboard_metrics", {})
+
+    assert result == {
+        "ok": False,
+        "error": {
+            "code": "TOOL_NOT_ALLOWED",
+            "message": (
+                "Tool get_dashboard_metrics is not published through "
+                "AgentCore Gateway."
             ),
         },
     }

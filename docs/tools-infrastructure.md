@@ -10,6 +10,10 @@ S3、DynamoDB、読み取り／書き込みLambda、Gatewayは2026-07-22にAWS�
 
 Web BFFだけが呼び出す承認バックエンドLambdaもAWSへdeploy済みです。Outputsは9つとなり、`ApprovalWorkflowFunctionName`と`ApprovalWorkflowFunctionArn`が追加されています。承認要求・承認・DynamoDB監査履歴の実環境テストも完了しています。2026-07-24には、Next.js BFFからRead/Write Lambdaを直接呼び出す専用envelopeをTools Stackへ反映し、Web Serviceから分析、承認、タスク登録、監査履歴までのAWS E2Eを確認しました。
 
+Webダッシュボードの登録済みタスク数を永続化された値へ連動するため、`entity_type`をpartition keyとする`BizFlowEntityTypeIndex`と、BFF専用`get_dashboard_metrics`操作をローカル実装しました。`TASK`を`Query`し、`Select=COUNT`と`LastEvaluatedKey`ページングで集計するため、テーブル全体の`Scan`は許可しません。Gateway用schemaとRuntime allow-listは変更せず、Agentへ公開するツールは4つのままです。この追加分はAWS反映前です。
+
+GSIの読み取りは結果整合性であり、`Select=COUNT`も一致項目を読む分のread capacityを使用します。現在の架空データ規模では簡潔なGSI Queryを採用し、大量タスクを扱う本番システムへ展開する場合はDynamoDB Streamsなどで更新するmaterialized counterへ置き換えます。
+
 CDKアプリでは`enableTools`の既定値を`false`にしています。次を明示した場合だけTools Stackをsynth対象に追加します。
 
 ```text
@@ -25,8 +29,8 @@ CDKアプリでは`enableTools`の既定値を`false`にしています。次を
 | リソース | 目的 | 主な保護設定 |
 |---|---|---|
 | S3 Bucket | 合成`business_requests.csv`と`company_rules.md`を`portfolio-data/`へ配置 | Block Public Access、SSE-S3、TLS必須、versioning、削除時retain |
-| DynamoDB Table | 承認、タスク、監査イベントを永続化 | On-demand、PITR、削除保護、暗号化、削除時retain |
-| Read Lambda | 4つの読み取りツールを処理 | S3 `GetObject`、DynamoDB `GetItem`/`Query`のみ |
+| DynamoDB Table | 承認、タスク、監査イベントを永続化 | On-demand、PITR、削除保護、暗号化、削除時retain、`entity_type` GSI |
+| Read Lambda | Gatewayの4読み取りツールとBFF専用ダッシュボード集計を処理 | S3 `GetObject`、DynamoDB `GetItem`/`Query`のみ |
 | Write Lambda | BFFからの`create_business_task`だけを処理 | DynamoDB `GetItem`/`PutItem`/`Query`/`UpdateItem`のみ。Gateway contextは拒否 |
 | Approval Lambda | BFFから承認要求・承認・却下・状態取得を処理 | DynamoDB `GetItem`/`PutItem`/`Query`/`UpdateItem`のみ。Gateway非公開 |
 | AgentCore Gateway | 読み取りLambdaを4つのMCPツールとして公開 | IAM認証、MCP `2025-06-18`。Write targetはAWSから削除済み |
@@ -45,6 +49,8 @@ Read Lambdaで許可するツールは次の4つです。
 - `get_task_status`
 
 Write Lambdaでは`create_business_task`だけを許可します。`BIZFLOW_ALLOWED_TOOLS`が未設定なら全処理を拒否し、`BIZFLOW_ALLOW_GATEWAY_CONTEXT=false`によってGateway形式の呼び出しも拒否します。BFF envelope自体は認証情報ではなく、Web Task Roleの対象Lambda限定`lambda:InvokeFunction`が認可境界です。
+
+Read Lambdaの`get_dashboard_metrics`はBFF専用です。`BIZFLOW_ALLOWED_TOOLS`には含めますが、`BIZFLOW_GATEWAY_ALLOWED_TOOLS`とGateway schemaには含めません。Gateway contextで操作名を直接指定しても`TOOL_NOT_ALLOWED`となります。
 
 ## Gateway Write targetの安全な廃止
 
@@ -87,6 +93,8 @@ Tableのpartition keyは`pk`、sort keyは`sk`です。
 | `BIZFLOW_RULES_KEY` | Markdown object key |
 | `BIZFLOW_WORKFLOW_TABLE` | DynamoDB Table名 |
 | `BIZFLOW_ALLOWED_TOOLS` | 関数で許可するツール名のカンマ区切り一覧 |
+| `BIZFLOW_GATEWAY_ALLOWED_TOOLS` | Gateway contextで公開を許可するツール名。BFF専用操作は除外 |
+| `BIZFLOW_WORKFLOW_ENTITY_TYPE_INDEX` | 登録済みタスク数をQueryするGSI名 |
 
 AWSクライアントはこれらのAWS環境変数が設定された場合だけ遅延生成するため、ローカルテストはAWS認証やネットワーク接続を必要としません。
 
@@ -146,6 +154,7 @@ Tools Stackの初回反映では、対象Account、Region、作成リソース�
 18. 完了: Web E2Eで未承認拒否、承認後登録、監査履歴を確認する。
 19. 完了: Write LambdaのGateway context拒否とWrite targetのDeletionPolicy変更をAWSへ反映し、Gateway拒否とWeb E2Eを再確認する。
 20. 完了: Write targetとGateway用書き込みschemaを削除してAWSへ反映し、Gatewayの4ツールとWeb承認・タスク登録E2Eを再確認する。
+21. ローカル実装済み・AWS反映前: `entity_type` GSIとBFF専用集計を追加し、Webの登録済みタスク数をDynamoDB永続値へ連動する。
 
 新規環境で同じTools Stackを構築する場合のコマンド例です。
 
@@ -202,3 +211,5 @@ Runtimeは`BIZFLOW_GATEWAY_URL`が設定された場合だけGatewayへ接続し
 - [AgentCore Gatewayの基本概念](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-core-concepts.html)
 - [AgentCore GatewayをMCP clientから使用する](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-using.html)
 - [AgentCore GatewayのIAM認証](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-inbound-auth.html)
+- [DynamoDB Global Secondary Index](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html)
+- [DynamoDB Query API](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Query.html)

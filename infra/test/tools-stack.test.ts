@@ -48,6 +48,13 @@ describe("BizFlowAgentToolsStack", () => {
           { AttributeName: "pk", KeyType: "HASH" },
           { AttributeName: "sk", KeyType: "RANGE" },
         ],
+        GlobalSecondaryIndexes: [
+          Match.objectLike({
+            IndexName: "BizFlowEntityTypeIndex",
+            KeySchema: [{ AttributeName: "entity_type", KeyType: "HASH" }],
+            Projection: { ProjectionType: "KEYS_ONLY" },
+          }),
+        ],
         PointInTimeRecoverySpecification: {
           PointInTimeRecoveryEnabled: true,
         },
@@ -65,9 +72,12 @@ describe("BizFlowAgentToolsStack", () => {
       Environment: {
         Variables: Match.objectLike({
           BIZFLOW_ALLOWED_TOOLS:
+            "get_business_requests,analyze_request_data,search_company_rules,get_task_status,get_dashboard_metrics",
+          BIZFLOW_GATEWAY_ALLOWED_TOOLS:
             "get_business_requests,analyze_request_data,search_company_rules,get_task_status",
           BIZFLOW_ALLOW_GATEWAY_CONTEXT: "true",
           BIZFLOW_DATA_BUCKET: Match.anyValue(),
+          BIZFLOW_WORKFLOW_ENTITY_TYPE_INDEX: "BizFlowEntityTypeIndex",
           BIZFLOW_WORKFLOW_TABLE: Match.anyValue(),
         }),
       },
@@ -80,6 +90,7 @@ describe("BizFlowAgentToolsStack", () => {
       Environment: {
         Variables: {
           BIZFLOW_ALLOWED_TOOLS: "create_business_task",
+          BIZFLOW_GATEWAY_ALLOWED_TOOLS: "",
           BIZFLOW_ALLOW_GATEWAY_CONTEXT: "false",
           BIZFLOW_WORKFLOW_TABLE: Match.anyValue(),
         },
@@ -144,6 +155,7 @@ describe("BizFlowAgentToolsStack", () => {
       },
     });
     const rendered = JSON.stringify(template.toJSON());
+    expect(rendered).toContain("/index/BizFlowEntityTypeIndex");
     expect(rendered).not.toContain("dynamodb:DeleteItem");
     expect(rendered).not.toContain("dynamodb:Scan");
   });
@@ -178,6 +190,7 @@ describe("BizFlowAgentToolsStack", () => {
     const rendered = JSON.stringify(template.toJSON());
     expect(rendered).not.toContain("BizFlowWriteTools");
     expect(rendered).not.toContain('"Name":"create_business_task"');
+    expect(rendered).not.toContain('"Name":"get_dashboard_metrics"');
   });
 
   test("allows only the runtime role to invoke this Gateway", () => {

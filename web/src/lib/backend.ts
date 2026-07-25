@@ -49,6 +49,10 @@ interface AnalysisResult {
   category_counts: Record<string, number>;
 }
 
+interface DashboardMetricsResult {
+  registered_task_count: number;
+}
+
 export async function getDashboard(): Promise<DashboardData> {
   if (isLocalDemo()) {
     return getDemoDashboard();
@@ -66,6 +70,15 @@ export async function getDashboard(): Promise<DashboardData> {
     "analyze_request_data",
     { requests: requestData.requests, as_of: asOf },
   );
+  const dashboardMetrics = await invokeBusinessTool<DashboardMetricsResult>(
+    requireEnvironment("BIZFLOW_READ_TOOLS_FUNCTION_NAME"),
+    "get_dashboard_metrics",
+    {},
+  );
+  const registeredTasks = requireNonNegativeInteger(
+    dashboardMetrics.registered_task_count,
+    "registered_task_count",
+  );
   return {
     source: "aws",
     period: { start, end, asOf },
@@ -73,7 +86,7 @@ export async function getDashboard(): Promise<DashboardData> {
       active: analysis.active_count,
       urgent: analysis.urgent_open_request_ids.length,
       overdue: analysis.overdue_request_ids.length,
-      registeredTasks: 0,
+      registeredTasks,
     },
     categoryCounts: analysis.category_counts,
     requests: requestData.requests,
@@ -243,4 +256,15 @@ function requireEnvironment(name: string): string {
     throw new AppError("SERVER_MISCONFIGURED", `${name}が設定されていません。`, 503);
   }
   return value;
+}
+
+function requireNonNegativeInteger(value: unknown, name: string): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 0) {
+    throw new AppError(
+      "INVALID_LAMBDA_RESPONSE",
+      `業務API応答の${name}が不正です。`,
+      502,
+    );
+  }
+  return value as number;
 }

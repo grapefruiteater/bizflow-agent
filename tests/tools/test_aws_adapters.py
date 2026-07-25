@@ -93,15 +93,24 @@ class FakeDynamoTable:
         )
         return {"Attributes": dict(item)}
 
-    def query(
-        self,
-        *,
-        KeyConditionExpression: str,
-        ExpressionAttributeValues: dict[str, str],
-        ConsistentRead: bool,
-    ) -> dict[str, Any]:
+    def query(self, **arguments: Any) -> dict[str, Any]:
+        KeyConditionExpression = arguments["KeyConditionExpression"]
+        ExpressionAttributeValues = arguments["ExpressionAttributeValues"]
+        if arguments.get("IndexName") == "BizFlowEntityTypeIndex":
+            assert KeyConditionExpression == "entity_type = :entity_type"
+            assert ExpressionAttributeValues == {":entity_type": "TASK"}
+            assert arguments["Select"] == "COUNT"
+            assert "ConsistentRead" not in arguments
+            assert "ExclusiveStartKey" not in arguments
+            return {
+                "Count": sum(
+                    item.get("entity_type") == "TASK"
+                    for item in self.items.values()
+                )
+            }
+
         assert KeyConditionExpression == "pk = :pk AND begins_with(sk, :prefix)"
-        assert ConsistentRead is True
+        assert arguments["ConsistentRead"] is True
         partition_key = ExpressionAttributeValues[":pk"]
         prefix = ExpressionAttributeValues[":prefix"]
         items = [
@@ -110,6 +119,24 @@ class FakeDynamoTable:
             if pk == partition_key and sk.startswith(prefix)
         ]
         return {"Items": items}
+
+
+class FakePaginatedTaskCountTable:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    def query(self, **arguments: Any) -> dict[str, Any]:
+        self.calls.append(arguments)
+        if "ExclusiveStartKey" not in arguments:
+            return {
+                "Count": 2,
+                "LastEvaluatedKey": {"pk": "TASK#2", "sk": "TASK"},
+            }
+        assert arguments["ExclusiveStartKey"] == {
+            "pk": "TASK#2",
+            "sk": "TASK",
+        }
+        return {"Count": 1, "LastEvaluatedKey": {}}
 
 
 def proposal() -> dict[str, str]:
@@ -158,6 +185,7 @@ def test_dynamo_store_enforces_approval_exact_match_and_idempotency() -> None:
     )
     task_proposal = proposal()
     approval = store.request_approval(task_proposal, "portfolio-user")
+    assert store.count_tasks() == 0
 
     with pytest.raises(BusinessToolError) as pending_error:
         store.create_task(approval["approval_id"], task_proposal)
@@ -183,6 +211,7 @@ def test_dynamo_store_enforces_approval_exact_match_and_idempotency() -> None:
 
     assert was_created is True
     assert was_created_again is False
+    assert store.count_tasks() == 1
     assert repeated["task_id"] == created["task_id"]
     assert store.get_task(created["task_id"])["approved_by"] == "team-manager"
     assert [event["event_type"] for event in store.get_history(approval["approval_id"])] == [
@@ -208,6 +237,17 @@ def test_dynamo_store_reuses_the_same_approval_request() -> None:
 
     assert repeated == first
     assert len(store.get_history(first["approval_id"])) == 1
+
+
+def test_dynamo_store_counts_all_paginated_task_index_results() -> None:
+    table = FakePaginatedTaskCountTable()
+    store = DynamoWorkflowStore(table)
+
+    assert store.count_tasks() == 3
+    assert len(table.calls) == 2
+    assert all(call["IndexName"] == "BizFlowEntityTypeIndex" for call in table.calls)
+    assert all(call["Select"] == "COUNT" for call in table.calls)
+    assert all("ConsistentRead" not in call for call in table.calls)
 
 
 def test_empty_environment_keeps_local_adapters_without_importing_aws_clients() -> None:

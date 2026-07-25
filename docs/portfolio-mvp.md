@@ -23,6 +23,7 @@
 | Web Foundation | AWSへdeploy済み | Web用ECR、2 AZのVPC、Cognito、ALB、Route 53、WAF、ECS ClusterとOutputsを確認済み |
 | Web Service / Fargate | AWSへdeploy・E2E検証済み | ARM64イメージ、private subnet、Cognito認証Listener Rule、最小権限Task Role |
 | 構造化提案・カード連携 | AWSへ反映・E2E検証済み | RuntimeのPydantic契約、BFF再検証、候補選択、承認カード自動反映 |
+| 永続ダッシュボード指標 | ローカル実装済み・AWS反映前 | DynamoDB GSIから登録済みタスク数をBFF専用操作で取得 |
 
 構成図 [`bizflow_agent_architecture.drawio`](../bizflow_agent_architecture.drawio) は完成形の目標構成です。現在動いているリソースと目標構成を混同しないよう、上表を実装状況の基準とします。
 
@@ -113,7 +114,8 @@ Agentは`proposed_actions`として問い合わせID、担当者、期限、対�
 18. 完了: Memory Stack、Runtime Version 8、Web Serviceへ反映し、別conversationと別利用者で長期Memory分離をE2E確認する。
 19. 完了・AWS反映済み: Write LambdaでGateway contextを拒否し、既存Write targetのDeletionPolicyを`Delete`へ変更する。
 20. 完了・AWS反映済み: Gateway Write targetと書き込みtool schemaを削除し、4つの読み取りツールだけを公開する。Gateway直接スモークテストとWeb E2Eも再確認済み。
-21. 信頼できるtenant claimを導入する場合だけ、会社共有Memoryを利用者Memoryと別namespaceで追加する。
+21. ローカル実装済み・AWS反映前: DynamoDB GSIとBFF専用集計で、登録済みタスク数をWeb初期表示へ反映する。
+22. 信頼できるtenant claimを導入する場合だけ、会社共有Memoryを利用者Memoryと別namespaceで追加する。
 
 Tools Stackのリソース、IAM境界、データモデル、Outputs、反映前確認は [`tools-infrastructure.md`](tools-infrastructure.md) にまとめています。
 

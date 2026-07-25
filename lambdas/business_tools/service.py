@@ -60,6 +60,8 @@ class WorkflowStore(Protocol):
 
     def get_history(self, approval_id: str) -> list[dict[str, Any]]: ...
 
+    def count_tasks(self) -> int: ...
+
 
 class LocalFileDataRepository:
     """Read the synthetic portfolio data bundled with the source tree."""
@@ -241,6 +243,9 @@ class MockWorkflowStore:
             if event["approval_id"] == normalized
         ]
 
+    def count_tasks(self) -> int:
+        return len(self._tasks)
+
     def _get_approval(self, approval_id: str) -> dict[str, Any]:
         normalized = require_text(approval_id, "approval_id", max_length=64)
         approval = self._approvals.get(normalized)
@@ -273,7 +278,7 @@ class MockWorkflowStore:
 
 
 class BusinessToolsService:
-    """Execute four Gateway reads and the BFF-only task-registration operation."""
+    """Execute Gateway reads and BFF-only dashboard and task operations."""
 
     def __init__(
         self,
@@ -383,6 +388,13 @@ class BusinessToolsService:
             "task": task,
             "history": self.workflow_store.get_history(task["approval_id"]),
         }
+
+    def get_dashboard_metrics(
+        self,
+        _arguments: Mapping[str, Any],
+    ) -> dict[str, int]:
+        return {"registered_task_count": self.workflow_store.count_tasks()}
+
 
 def normalize_request(value: Any) -> dict[str, str]:
     if not isinstance(value, Mapping):

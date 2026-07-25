@@ -17,6 +17,7 @@ LOGGER.setLevel(logging.INFO)
 SERVICE = build_service_from_environment()
 TOOL_DELIMITER = "___"
 ALLOWED_TOOLS_ENV = "BIZFLOW_ALLOWED_TOOLS"
+GATEWAY_ALLOWED_TOOLS_ENV = "BIZFLOW_GATEWAY_ALLOWED_TOOLS"
 ALLOW_GATEWAY_CONTEXT_ENV = "BIZFLOW_ALLOW_GATEWAY_CONTEXT"
 BFF_SOURCE = "bizflow-web-bff"
 
@@ -25,11 +26,16 @@ def lambda_handler(event: Any, context: Any) -> dict[str, Any]:
     """Dispatch an allowed Gateway-read or trusted BFF invocation."""
 
     try:
-        tool_name, arguments = resolve_invocation(event, context)
+        tool_name, arguments, is_gateway_invocation = resolve_invocation(event, context)
         if tool_name not in get_allowed_tools():
             raise BusinessToolError(
                 "TOOL_NOT_ALLOWED",
                 f"Tool {tool_name} is not enabled for this Lambda function.",
+            )
+        if is_gateway_invocation and tool_name not in get_gateway_allowed_tools():
+            raise BusinessToolError(
+                "TOOL_NOT_ALLOWED",
+                f"Tool {tool_name} is not published through AgentCore Gateway.",
             )
         handler = get_tool_handlers().get(tool_name)
         if handler is None:
@@ -64,11 +70,20 @@ def get_tool_handlers() -> dict[str, Callable[[Mapping[str, Any]], dict[str, Any
         "search_company_rules": SERVICE.search_company_rules,
         "create_business_task": SERVICE.create_business_task,
         "get_task_status": SERVICE.get_task_status,
+        "get_dashboard_metrics": SERVICE.get_dashboard_metrics,
     }
 
 
 def get_allowed_tools() -> set[str]:
-    configured = os.environ.get(ALLOWED_TOOLS_ENV, "").strip()
+    return get_configured_tools(ALLOWED_TOOLS_ENV)
+
+
+def get_gateway_allowed_tools() -> set[str]:
+    return get_configured_tools(GATEWAY_ALLOWED_TOOLS_ENV)
+
+
+def get_configured_tools(environment_variable: str) -> set[str]:
+    configured = os.environ.get(environment_variable, "").strip()
     if not configured:
         return set()
     return {name.strip() for name in configured.split(",") if name.strip()}
@@ -89,7 +104,7 @@ def require_arguments(event: Any) -> Mapping[str, Any]:
 def resolve_invocation(
     event: Any,
     context: Any,
-) -> tuple[str, Mapping[str, Any]]:
+) -> tuple[str, Mapping[str, Any], bool]:
     """Resolve either an AgentCore Gateway call or a trusted BFF invocation.
 
     The direct envelope is not an authentication mechanism. Lambda IAM remains
@@ -106,7 +121,7 @@ def resolve_invocation(
                 "GATEWAY_WRITE_DISABLED",
                 "Write operations are available only through the trusted BizFlow Web BFF.",
             )
-        return get_gateway_tool_name(context), require_arguments(event)
+        return get_gateway_tool_name(context), require_arguments(event), True
 
     request = require_arguments(event)
     if request.get("source") != BFF_SOURCE:
@@ -116,7 +131,7 @@ def resolve_invocation(
         )
     operation = require_text(request.get("operation"), "operation", 64)
     arguments = require_arguments(request.get("arguments"))
-    return operation, arguments
+    return operation, arguments, False
 
 
 def get_gateway_tool_name(context: Any) -> str:

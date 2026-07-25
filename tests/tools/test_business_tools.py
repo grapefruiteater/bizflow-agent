@@ -34,6 +34,14 @@ def service(monkeypatch) -> BusinessToolsService:
     workflow = MockWorkflowStore(now_factory=lambda: FIXED_NOW)
     instance = BusinessToolsService(workflow_store=workflow)
     monkeypatch.setattr(lambda_function, "SERVICE", instance)
+    monkeypatch.setenv(
+        "BIZFLOW_ALLOWED_TOOLS",
+        (
+            "get_business_requests,analyze_request_data,search_company_rules,"
+            "create_business_task,get_task_status"
+        ),
+    )
+    monkeypatch.setenv("BIZFLOW_ALLOW_GATEWAY_CONTEXT", "true")
     return instance
 
 
@@ -130,7 +138,7 @@ def test_create_task_rejects_unapproved_proposal(
         requested_by="portfolio-user",
     )
 
-    result = invoke(
+    result = invoke_from_bff(
         "create_business_task",
         {"approval_id": approval["approval_id"], **proposal},
     )
@@ -162,7 +170,7 @@ def test_create_task_rejects_changes_after_approval(
     )
     service.workflow_store.approve(approval["approval_id"], "team-manager")
 
-    result = invoke(
+    result = invoke_from_bff(
         "create_business_task",
         {
             "approval_id": approval["approval_id"],
@@ -191,8 +199,8 @@ def test_approved_task_is_idempotent_and_status_is_available(
     service.workflow_store.approve(approval["approval_id"], "team-manager")
     arguments = {"approval_id": approval["approval_id"], **proposal}
 
-    created = invoke("create_business_task", arguments)
-    repeated = invoke("create_business_task", arguments)
+    created = invoke_from_bff("create_business_task", arguments)
+    repeated = invoke_from_bff("create_business_task", arguments)
 
     assert created["ok"] is True
     assert created["data"]["created"] is True
@@ -269,6 +277,51 @@ def test_lambda_enforces_the_configured_read_write_tool_boundary(
             "due_date": "2026-07-13",
             "action": "一次回答する",
         },
+    )
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "TOOL_NOT_ALLOWED"
+
+
+def test_write_lambda_rejects_gateway_context_even_for_an_allowed_tool(
+    service: BusinessToolsService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("BIZFLOW_ALLOWED_TOOLS", "create_business_task")
+    monkeypatch.setenv("BIZFLOW_ALLOW_GATEWAY_CONTEXT", "false")
+
+    result = invoke(
+        "create_business_task",
+        {
+            "approval_id": "APR-NOT-REACHABLE",
+            "request_id": "REQ-002",
+            "assignee": "support-lead",
+            "due_date": "2026-07-13",
+            "action": "一次回答する",
+        },
+    )
+
+    assert result == {
+        "ok": False,
+        "error": {
+            "code": "GATEWAY_WRITE_DISABLED",
+            "message": (
+                "Write operations are available only through the trusted "
+                "BizFlow Web BFF."
+            ),
+        },
+    }
+
+
+def test_missing_allowed_tools_configuration_fails_closed(
+    service: BusinessToolsService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("BIZFLOW_ALLOWED_TOOLS")
+
+    result = invoke(
+        "get_business_requests",
+        {"start_date": "2026-07-10", "end_date": "2026-07-13"},
     )
 
     assert result["ok"] is False

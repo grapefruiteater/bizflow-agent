@@ -93,6 +93,7 @@ export class BizFlowAgentToolsStack extends Stack {
       `bizflow-read-tools-${props.environmentName}`,
       lambdaCode,
       READ_TOOL_NAMES,
+      true,
       {
         BIZFLOW_DATA_BUCKET: this.dataBucket.bucketName,
         BIZFLOW_REQUESTS_KEY: `${DATA_PREFIX}/business_requests.csv`,
@@ -120,6 +121,7 @@ export class BizFlowAgentToolsStack extends Stack {
       `bizflow-write-tools-${props.environmentName}`,
       lambdaCode,
       WRITE_TOOL_NAMES,
+      false,
       {
         BIZFLOW_WORKFLOW_TABLE: this.workflowTable.tableName,
       },
@@ -165,7 +167,7 @@ export class BizFlowAgentToolsStack extends Stack {
           bedrockagentcore.MCPProtocolVersion.MCP_2025_06_18,
         ],
         instructions:
-          "Use read tools for analysis. Invoke create_business_task only with a server-issued approval ID.",
+          "Use the four read-only tools for analysis. Task creation is available only through the authenticated BizFlow Web approval flow.",
       }),
       tags: {
         Application: "BizFlowAgent",
@@ -190,13 +192,17 @@ export class BizFlowAgentToolsStack extends Stack {
 
     const writeTarget = this.gateway.addLambdaTarget("WriteToolsTarget", {
       gatewayTargetName: "BizFlowWriteTools",
-      description: "Approval-enforced business task creation tool",
+      description:
+        "Deprecated write target; Lambda rejects Gateway calls while removal is prepared",
       lambdaFunction: this.writeToolsFunction,
       toolSchema: bedrockagentcore.ToolSchema.fromInline(
         selectTools(allTools, WRITE_TOOL_NAMES),
       ),
     });
-    writeTarget.applyRemovalPolicy(RemovalPolicy.RETAIN);
+    // This target was originally deployed with RETAIN. Change its policy in a
+    // separate deployment before removing the resource from the template, or
+    // CloudFormation will retain the target and it will remain discoverable.
+    writeTarget.applyRemovalPolicy(RemovalPolicy.DESTROY);
 
     const runtimeGatewayPolicy = new iam.Policy(
       this,
@@ -278,6 +284,7 @@ export class BizFlowAgentToolsStack extends Stack {
     functionName: string,
     code: lambda.Code,
     allowedTools: readonly string[],
+    allowGatewayContext: boolean,
     environment: Record<string, string>,
   ): lambda.Function {
     const logGroup = new logs.LogGroup(this, `${id}LogGroup`, {
@@ -300,6 +307,7 @@ export class BizFlowAgentToolsStack extends Stack {
       environment: {
         ...environment,
         BIZFLOW_ALLOWED_TOOLS: allowedTools.join(","),
+        BIZFLOW_ALLOW_GATEWAY_CONTEXT: allowGatewayContext ? "true" : "false",
       },
     });
   }

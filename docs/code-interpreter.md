@@ -2,7 +2,7 @@
 
 ## 現在の状態
 
-AWS管理のAgentCore Code Interpreter `aws.codeinterpreter.v1`を、BizFlow Runtimeの読み取り専用分析ツールとして使用するソース、IAM Policy、公開スクリプト、ローカルテストを実装済みです。2026-07-22にRuntime実行ロールの`UseManagedCodeInterpreter`権限をFoundation Stackへdeployし、Runtime Version 5で実呼び出しを確認しました。短期Memoryを追加したRuntime Version 6への更新時にもCode Interpreter自動スモークテストが成功しています。
+AWS管理のAgentCore Code Interpreter `aws.codeinterpreter.v1`を、BizFlow Runtimeの読み取り専用分析ツールとして使用するソース、IAM Policy、公開スクリプト、ローカルテストを実装済みです。2026-07-22にRuntime実行ロールの`UseManagedCodeInterpreter`権限をFoundation Stackへdeployし、Runtime Version 5で実呼び出しを確認しました。利用者別長期Memoryを追加したRuntime Version 8への更新時にもCode Interpreter自動スモークテストが成功しています。
 
 AgentCoreコンソールからVersion 5へPythonによる1から100までの整数の二乗和を依頼し、期待値`338350`を得ました。CloudWatch Logsの`bizflow.code_interpreter Code Interpreter analysis completed`も確認したため、ツール選択、Python実行、結果取得、セッション終了まで実環境検証済みです。
 

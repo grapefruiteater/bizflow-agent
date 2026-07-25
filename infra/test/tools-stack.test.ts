@@ -66,6 +66,7 @@ describe("BizFlowAgentToolsStack", () => {
         Variables: Match.objectLike({
           BIZFLOW_ALLOWED_TOOLS:
             "get_business_requests,analyze_request_data,search_company_rules,get_task_status",
+          BIZFLOW_ALLOW_GATEWAY_CONTEXT: "true",
           BIZFLOW_DATA_BUCKET: Match.anyValue(),
           BIZFLOW_WORKFLOW_TABLE: Match.anyValue(),
         }),
@@ -79,6 +80,7 @@ describe("BizFlowAgentToolsStack", () => {
       Environment: {
         Variables: {
           BIZFLOW_ALLOWED_TOOLS: "create_business_task",
+          BIZFLOW_ALLOW_GATEWAY_CONTEXT: "false",
           BIZFLOW_WORKFLOW_TABLE: Match.anyValue(),
         },
       },
@@ -146,7 +148,7 @@ describe("BizFlowAgentToolsStack", () => {
     expect(rendered).not.toContain("dynamodb:Scan");
   });
 
-  test("publishes four read tools and one approval-enforced write tool", () => {
+  test("publishes four read tools while preparing the legacy write target for removal", () => {
     template.hasResourceProperties("AWS::BedrockAgentCore::Gateway", {
       AuthorizerType: "AWS_IAM",
       Name: "bizflow-tools-test",
@@ -186,6 +188,16 @@ describe("BizFlowAgentToolsStack", () => {
           }),
         },
       },
+    });
+    const targets = template.findResources(
+      "AWS::BedrockAgentCore::GatewayTarget",
+    );
+    const writeTarget = Object.values(targets).find(
+      (resource) => resource.Properties?.Name === "BizFlowWriteTools",
+    );
+    expect(writeTarget).toMatchObject({
+      DeletionPolicy: "Delete",
+      UpdateReplacePolicy: "Delete",
     });
   });
 

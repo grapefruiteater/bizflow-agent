@@ -10,7 +10,7 @@ ALBの`x-amzn-oidc-data`はCognito ID tokenではなくUserInfo由来のclaims�
 
 Agentの文章から承認内容を推測する処理は行いません。Runtimeが`output_contract_version: "1.0"`と検証済み`proposed_actions`を返し、BFFが契約を再検証して承認カードへ自動反映します。複数候補は選択でき、理由と参照ルールを表示します。このRuntime/Web更新はAWS E2Eまで確認済みです。
 
-次の更新として、BFFが検証済みCognito identityから不透明な`runtimeUserId`を導出し、利用者別AgentCore Memoryへ委任する処理をローカル実装しました。Web Task Roleの`InvokeAgentRuntimeForUser`とWebイメージ更新はAWS反映前です。
+BFFが検証済みCognito identityから不透明な`runtimeUserId`を導出し、利用者別AgentCore Memoryへ委任する処理もAWSへ反映済みです。別conversationでのUser Preference取得、利用者分離、CloudWatch Logsの`user_scoped=True`と長期抽出を確認しました。
 
 ## 構成
 

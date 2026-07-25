@@ -1,1 +1,1 @@
-"""Business tool implementations exposed through an AgentCore Gateway target."""
+"""Business tools used by the read-only Gateway and trusted Web BFF."""

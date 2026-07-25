@@ -37,7 +37,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def require_success_payload(result: Mapping[str, Any], tool_name: str) -> dict[str, Any]:
+def extract_json_payload(result: Mapping[str, Any], tool_name: str) -> dict[str, Any]:
     if result.get("status") != "success" or result.get("isError") is True:
         raise RuntimeError(f"Gateway tool {tool_name} failed: {result}")
 
@@ -59,11 +59,15 @@ def require_success_payload(result: Mapping[str, Any], tool_name: str) -> dict[s
 
     for candidate in candidates:
         if isinstance(candidate, Mapping):
-            payload = dict(candidate)
-            if payload.get("ok") is False:
-                raise RuntimeError(f"Gateway tool {tool_name} was rejected: {payload}")
-            return payload
+            return dict(candidate)
     raise RuntimeError(f"Gateway tool {tool_name} returned no JSON object: {result}")
+
+
+def require_success_payload(result: Mapping[str, Any], tool_name: str) -> dict[str, Any]:
+    payload = extract_json_payload(result, tool_name)
+    if payload.get("ok") is False:
+        raise RuntimeError(f"Gateway tool {tool_name} was rejected: {payload}")
+    return payload
 
 
 def invoke_tool(client: Any, actual_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -73,6 +77,26 @@ def invoke_tool(client: Any, actual_name: str, arguments: dict[str, Any]) -> dic
         arguments=arguments,
     )
     return require_success_payload(result, business_tool_name(actual_name))
+
+
+def invoke_tool_expect_error(
+    client: Any,
+    actual_name: str,
+    arguments: dict[str, Any],
+    expected_code: str,
+) -> None:
+    result = client.call_tool_sync(
+        tool_use_id=str(uuid.uuid4()),
+        name=actual_name,
+        arguments=arguments,
+    )
+    payload = extract_json_payload(result, business_tool_name(actual_name))
+    error = payload.get("error")
+    actual_code = error.get("code") if isinstance(error, Mapping) else None
+    if payload.get("ok") is not False or actual_code != expected_code:
+        raise RuntimeError(
+            f"Gateway write boundary returned {payload}; expected {expected_code}."
+        )
 
 
 def main() -> int:
@@ -147,8 +171,22 @@ def main() -> int:
             f"(count={rules_data.get('count', 'not-reported')})"
         )
 
+        invoke_tool_expect_error(
+            client,
+            tools_by_business_name["create_business_task"],
+            {
+                "approval_id": "APR-GATEWAY-MUST-NOT-WRITE",
+                "request_id": "REQ-002",
+                "assignee": "security-check",
+                "due_date": args.as_of,
+                "action": "This operation must be rejected before task creation.",
+            },
+            "GATEWAY_WRITE_DISABLED",
+        )
+        print("create_business_task: Rejected by BFF-only boundary")
+
     print("Gateway read-tool smoke test succeeded.")
-    print("create_business_task and get_task_status were not invoked.")
+    print("get_task_status was not invoked because this smoke test creates no task.")
     return 0
 
 

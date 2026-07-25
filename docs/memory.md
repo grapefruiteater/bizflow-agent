@@ -2,17 +2,15 @@
 
 ## 現在の状態
 
-同一Runtime session内の短期会話MemoryはAWSへ反映済みで、2ターンの保存・再取得まで確認済みです。
-
-次の更新として、Cognitoで認証した利用者ごとの長期設定Memoryをローカル実装しました。Runtime、BFF、CDK、PowerShell、テストの変更は完了していますが、User Preference strategy、Runtime更新、Web更新はまだAWSへ反映していません。
+同一Runtime session内の短期会話Memoryと、Cognitoで認証した利用者ごとの長期User Preference MemoryをAWSへ反映済みです。Runtime Version 8の`PROD`で短期Memoryの2ターン保存・再取得が成功し、Webでは同じ利用者の別conversationから長期設定を取得できることと、別利用者へ共有されないことを確認しました。
 
 | 機能 | 状態 |
 |---|---|
 | session単位の短期会話 | AWSで検証済み |
-| Cognito利用者の信頼境界 | ローカル実装・検証済み |
-| User Preference strategy | CDK差分確認前 |
-| Runtimeの長期Memory取得・抽出 | ローカル実装・検証済み |
-| Webからの利用者別E2E | AWS反映後に確認 |
+| Cognito利用者の信頼境界 | AWSで検証済み |
+| User Preference strategy | `ACTIVE`確認済み |
+| Runtimeの長期Memory取得・抽出 | Version 8へ反映済み |
+| Webからの利用者別E2E | 別conversation・別利用者で確認済み |
 
 ## IDと権限の境界
 
@@ -146,9 +144,9 @@ npm --prefix web run build
 
 `tests/runtime/test_conversation_memory.py`では、利用者namespace分離、取得件数と文字数制限、未検証IDの拒否、user有無による長期抽出の切り替えをfake clientで確認します。
 
-## AWS反映順序
+## AWS反映履歴と再実行手順
 
-以下はユーザーが差分を確認して実行する手順です。自動では実行しません。
+次の順序で2026-07-25に反映・確認済みです。再構築時も同じ順序を使用し、自動では実行しません。
 
 ### 1. Memory Stack
 
@@ -162,7 +160,7 @@ npx cdk diff BizFlowAgentMemoryStack `
   --profile $AwsProfile
 ```
 
-期待する主な差分は、既存Memoryへの`UserPreferenceMemoryStrategy`追加、Runtime IAM Policyへのnamespace限定`RetrieveMemoryRecords`追加、2つのOutput追加です。Memoryの置換、Foundation/Runtime/Toolsの変更、既存リソース削除が表示された場合はdeployしません。
+確認済みの差分は、既存Memoryへの`UserPreferenceMemoryStrategy`追加、Runtime IAM Policyへのnamespace限定`RetrieveMemoryRecords`追加、2つのOutput追加です。Memoryの置換、Foundation/Runtime/Toolsの変更、既存リソース削除はありませんでした。
 
 差分が期待どおりなら、明示判断後にMemory Stackだけを更新します。
 
@@ -195,7 +193,7 @@ npx cdk deploy BizFlowAgentMemoryStack `
   -MemoryConfigPath .\config\memory-outputs.json
 ```
 
-dry-runでMemory ID、`USER_PREFERENCE`、namespace templateが表示されることを確認します。問題がなければ、同じコマンドへ`-Execute`を追加し、Runtimeが`READY`になった後だけ`PROD`を更新します。
+dry-runでMemory ID、`USER_PREFERENCE`、namespace templateを確認後、`-Execute`でRuntime Version 8を作成し、`READY`後に`PROD`をVersion 7から8へ更新しました。
 
 公開時の自動Memoryテストは、user IDを渡さない従来のsession内2ターンテストです。これにより直接呼び出しのfallbackを確認します。長期抽出は非同期なので、Web E2Eで別に確認します。
 
@@ -214,7 +212,7 @@ npx cdk diff BizFlowWebServiceStack `
   --profile $AwsProfile
 ```
 
-期待する差分は、Web Task Roleへの`InvokeAgentRuntimeForUser`追加と、新しいdigestを使うTask Definition/Service更新です。権限のResourceは既存Runtime ARNと`PROD` Endpoint ARNだけで、`*`にしません。
+確認済みの差分は、Web Task Roleへの`InvokeAgentRuntimeForUser`追加と、新しいdigestを使うTask Definition/Service更新です。権限のResourceは既存Runtime ARNと`PROD` Endpoint ARNだけで、`*`は使用していません。
 
 ### 4. Web E2E
 

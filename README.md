@@ -8,21 +8,21 @@ AWS基盤は、以前のアプリやCDKスタックで作成したリソース�
 
 ## 現在の状態
 
-2026-07-24時点では、AgentCore RuntimeがAWSの`PROD` Endpointで稼働しています。RuntimeはAmazon Nova 2 Lite、AgentCore Gatewayの読み取りツール、AWS管理Code Interpreter、同一Runtime session内の短期Memoryを使用できます。通常呼び出し、Code Interpreter、Memoryの2ターン保存・再取得、構造化提案の読み取り専用応答契約を検証済みです。Next.js Web/BFFもECS/Fargateへdeploy済みで、Cognitoログイン、Agent提案の承認カード自動反映、承認、タスク登録、監査履歴までのAWS E2Eを確認済みです。
+2026-07-25時点では、AgentCore Runtime Version 8がAWSの`PROD` Endpointで稼働しています。RuntimeはAmazon Nova 2 Lite、AgentCore Gatewayの読み取りツール、AWS管理Code Interpreter、session短期Memory、Cognito利用者別User Preference Memoryを使用できます。通常呼び出し、Code Interpreter、短期Memoryの2ターン保存・再取得、別conversationでの長期設定取得、構造化提案を検証済みです。Next.js Web/BFFもECS/Fargateへdeploy済みで、Cognitoログイン、利用者別Memory、承認カード、承認、タスク登録、監査履歴までのAWS E2Eを確認済みです。
 
 | 項目 | 状態 |
 |---|---|
-| AgentCore Runtime | 構造化提案対応版を`PROD`へ反映・検証済み |
+| AgentCore Runtime | Version 8を`PROD`へ反映・検証済み |
 | Runtimeイメージ | GitコミットSHAタグ、ECR digest固定 |
 | Bedrockモデル | `jp.amazon.nova-2-lite-v1:0` |
 | Gateway読み取りツール | 4ツールをRuntimeへ接続済み |
-| Gateway書き込みツール | AWSへdeploy済みだがRuntimeから除外 |
+| Gateway書き込みツール | AWS targetは残存、Runtimeから除外。BFF専用化の第1段階をローカル実装済み |
 | S3・DynamoDB・Lambda・Gateway | `BizFlowAgentToolsStack`としてdeploy済み |
 | Web BFF用Lambda直接呼び出し | 2026-07-24にTools Stackへ反映済み |
 | CloudWatch Logs | `PROD`の呼び出しログを確認済み |
 | 承認バックエンドLambda | AWSへdeploy・動作確認済み |
-| Code Interpreter | Runtime Version 6でも自動スモークテスト成功 |
-| AgentCore Memory | session短期MemoryはAWS検証済み。Cognito利用者別User Preferenceはローカル実装・検証済み、AWS反映前 |
+| Code Interpreter | Runtime Version 8の自動スモークテスト成功 |
+| AgentCore Memory | Version 8でsession短期MemoryとCognito利用者別User PreferenceをAWS E2E検証済み |
 | Next.js Web/BFF | ECS/Fargateへdeploy済み。Cognitoログインから監査履歴までのAWS E2Eを検証済み |
 | Web Foundation | 2026-07-23にECR、VPC、Cognito、ALB、Route 53、WAF、ECS ClusterをAWSへdeploy・確認済み |
 | Web Service / ECS Fargate | AWSへdeploy済み。Cognitoグループ認可とRuntime/Lambda呼び出し権限を修正し、承認者E2Eを検証済み |
@@ -50,9 +50,9 @@ Runtime環境変数`BIZFLOW_GATEWAY_URL`は`config/tools-outputs.json`から公�
 
 Web/BFFだけが呼び出す承認バックエンドLambdaもAWSへdeploy済みです。承認要求、状態確認、承認、DynamoDB監査履歴が正常に機能することを確認しました。このLambdaはAgentCore Gateway targetには登録せず、モデルから到達できない境界を維持しています。Next.js BFFはこの承認を取得してから承認内容をWrite Lambdaへ渡すため、モデル自身へ書き込みツールを公開しません。Web実装は [`docs/web-application.md`](docs/web-application.md)、承認契約は [`docs/approval-workflow.md`](docs/approval-workflow.md) を参照してください。
 
-AWS管理の`aws.codeinterpreter.v1`を使うCode Interpreter分析ツールはRuntime Version 6でも有効です。Version 5で1から100までの整数の二乗和`338350`とCloudWatch Logsの完了ログを確認し、Version 6への更新時にも自動スモークテストが成功しました。既存の`analyze_request_data`は決定的なフォールバックとして残しています。詳細は [`docs/code-interpreter.md`](docs/code-interpreter.md) を参照してください。
+AWS管理の`aws.codeinterpreter.v1`を使うCode Interpreter分析ツールはRuntime Version 8でも有効です。Version 5で1から100までの整数の二乗和`338350`とCloudWatch Logsの完了ログを確認し、Version 8への更新時にも自動スモークテストが成功しました。既存の`analyze_request_data`は決定的なフォールバックとして残しています。詳細は [`docs/code-interpreter.md`](docs/code-interpreter.md) を参照してください。
 
-同一Runtime session ID内だけで会話を継続するAgentCore短期MemoryはAWSへ反映済みです。次の更新として、BFFが検証済みCognito identityから生の`sub`を含まないuser IDを導出し、AgentCoreの`runtimeUserId`でRuntimeへ渡す利用者別長期Memoryをローカル実装しました。User Preference strategyは`/users/{actorId}/preferences/`で利用者を分離し、user IDがない直接呼び出しでは長期抽出を行いません。AWS反映と利用者間分離E2Eは未実施です。詳細は [`docs/memory.md`](docs/memory.md)、ポートフォリオ全体は [`docs/portfolio-mvp.md`](docs/portfolio-mvp.md)、ツール基盤は [`docs/tools-infrastructure.md`](docs/tools-infrastructure.md) を参照してください。
+同一Runtime session ID内の短期Memoryと、Cognito利用者別の長期User Preference MemoryはRuntime Version 8へ反映済みです。BFFは検証済みCognito identityから生の`sub`を含まないuser IDを導出し、AgentCoreの`runtimeUserId`でRuntimeへ渡します。User Preference strategyは`/users/{actorId}/preferences/`で利用者を分離し、user IDがない直接呼び出しでは長期抽出を行いません。別conversationでの設定取得と利用者分離をWeb E2Eで確認済みです。詳細は [`docs/memory.md`](docs/memory.md)、ポートフォリオ全体は [`docs/portfolio-mvp.md`](docs/portfolio-mvp.md)、ツール基盤は [`docs/tools-infrastructure.md`](docs/tools-infrastructure.md) を参照してください。
 
 採用モデルはAmazon Nova 2 LiteのJP地理推論profileです。
 
@@ -181,7 +181,7 @@ bizflow-agent/
 | `config/cdk-outputs.json` | BizFlow専用スタックのdeploy後に生成する環境固有ファイルです。Git管理せず、公開スクリプトの入力として使用します。 |
 | `scripts/publish-agentcore.ps1` | Git SHAタグによるARM64イメージ公開とAgentCore Runtime更新を行います。デフォルトはdry-runで、`-Execute` 指定時のみbuild/pushとRuntime更新へ進みます。 |
 | `scripts/smoke-test-agentcore.ps1` | ローカルコンテナまたはAgentCore上の`PROD` Endpointを検証します。リモートではEndpoint状態・liveVersion・実呼び出しを確認します。 |
-| `scripts/smoke-test-gateway.ps1` / `smoke_test_gateway.py` | IAM Identity Center profileでGatewayへSigV4接続し、5ツールの一覧と3つの読み取りツールを直接検証します。書き込みツールは呼び出しません。 |
+| `scripts/smoke-test-gateway.ps1` / `smoke_test_gateway.py` | IAM Identity Center profileでGatewayへSigV4接続し、5ツールの一覧と3つの読み取りツールを検証します。書き込みツールはダミー入力で呼び、BFF専用境界による拒否だけを確認します。 |
 | `scripts/demo-business-tools.py` | AWSへ接続せず、問い合わせ取得、集計、ルール検索、未承認拒否、承認、タスク登録、状態確認を順番に再現します。 |
 | `docs/business-analysis.md` | 構造化された問い合わせ分析の入力項目、決定的な判定規則、応答契約、リクエスト例を説明します。 |
 | `docs/approval-workflow.md` | モデルから分離した承認バックエンドLambdaの操作契約、IAM境界、現在の反映状態を説明します。 |
@@ -200,7 +200,7 @@ bizflow-agent/
 | `lambdas/business_tools/data/company_rules.md` | 障害、期限超過、請求、契約、個人情報に関する架空の社内対応ルールです。 |
 | `lambdas/business_tools/tool-schema.json` | AgentCore GatewayのLambda targetへ登録する5ツールの入力schemaです。 |
 | `lambdas/business_tools/aws_adapters.py` | S3から合成データを読むadapterと、DynamoDBへ承認・タスク・監査イベントを永続化するadapterです。AWSクライアントはLambda環境変数がある場合だけ遅延生成します。 |
-| `lambdas/business_tools/lambda_function.py` | Gateway contextのツール名を読み、許可された処理へ振り分けるLambda handlerです。`BIZFLOW_ALLOWED_TOOLS`により読み取り用Lambdaで書き込みツールを拒否します。 |
+| `lambdas/business_tools/lambda_function.py` | GatewayまたはBFFの呼び出し元を判別し、許可された処理へ振り分けるLambda handlerです。tool allow-listをfail-closedにし、書き込みLambdaではGateway contextを拒否します。 |
 | `lambdas/business_tools/service.py` | CSV取得、決定的集計、ルール検索、承認検証、タスク登録・状態取得、監査イベントのドメイン処理と、ローカル用adapterを実装します。 |
 
 ### 承認バックエンド
@@ -231,7 +231,7 @@ bizflow-agent/
 | `infra/lib/foundation-stack.ts` | BizFlow専用ECR、AgentCore実行IAMロール、`PUBLIC`ネットワーク設定を作成します。Bedrock権限を指定profile/modelへ限定し、AWS管理Code Interpreterにはセッション利用権限だけを付与します。 |
 | `infra/lib/memory-stack.ts` | 30日保持のAgentCore Memory、利用者別User Preference strategy、既存Runtimeロールのイベント権限とnamespace限定取得権限を定義します。 |
 | `infra/lib/runtime-stack.ts` | digest固定の初回コンテナからAgentCore Runtime、`PROD`カスタムEndpoint、Endpoint別の30日保持ロググループ、通常更新用Outputsを作成します。`DEFAULT` EndpointはRuntime作成時にAgentCoreが自動作成します。 |
-| `infra/lib/tools-stack.ts` | 合成データ用S3、承認・タスク・監査用DynamoDB、Gateway用の読み取り／書き込みLambda、BFF向け承認Lambda、IAM認証のAgentCore Gatewayと5ツールを定義します。既存RuntimeロールはOutputs由来のARNでimportします。 |
+| `infra/lib/tools-stack.ts` | 合成データ用S3、承認・タスク・監査用DynamoDB、読み取り／BFF書き込みLambda、承認Lambda、IAM認証のAgentCore Gatewayを定義します。書き込みtargetの安全な2段階削除と既存RuntimeロールのOutputs importも管理します。 |
 | `infra/lib/web-foundation-stack.ts` | Web専用ECR、VPC、ECS Cluster、Cognito、HTTPS ALB、Route 53 Alias、WAFを定義します。 |
 | `infra/lib/web-service-stack.ts` | digest固定ARM64イメージのFargate Service、最小権限Task Role、Target Group、Cognito認証Listener Ruleを定義します。 |
 | `infra/test/foundation-stack.test.ts` | ECRとIAM、およびFoundation OutputsのCloudFormation定義を検証します。 |
@@ -315,7 +315,7 @@ S3、DynamoDB、Gateway、読み取り／書き込みLambda、承認バックエ
 
 ### 短期Memoryと利用者別長期Memory
 
-`BizFlowAgentMemoryStack`はFoundation、Tools、通常のRuntime更新から分離しています。30日保持の短期AgentCore MemoryはAWSへ反映済みです。現在のソースは、`enableMemory=true`の場合にCognito利用者別のUser Preference strategyとnamespace限定取得権限も定義します。この追加分はAWS反映前です。
+`BizFlowAgentMemoryStack`はFoundation、Tools、通常のRuntime更新から分離しています。30日保持の短期AgentCore Memory、Cognito利用者別User Preference strategy、namespace限定取得権限をAWSへ反映済みです。Memory IDとnamespaceはRuntime Version 8へ設定し、Webから別conversationで長期設定を取得できることを確認しました。
 
 ### 通常更新
 
@@ -408,7 +408,7 @@ docker run --rm --platform linux/arm64 `
 
 ## 通常更新の公開前確認
 
-まず、deploy済みGatewayの読み取り経路を直接確認します。このコマンドはAWSリソースを変更せず、`tools/list`、問い合わせ取得、決定的集計、社内ルール検索を実行します。`create_business_task`は呼び出しません。
+まず、deploy済みGatewayの読み取り経路を直接確認します。このコマンドはAWSリソースを変更せず、`tools/list`、問い合わせ取得、決定的集計、社内ルール検索を実行します。BFF専用化の第1段階では`create_business_task`もダミー入力で呼び、タスク処理前に`GATEWAY_WRITE_DISABLED`で拒否されることを確認します。
 
 ```powershell
 .\scripts\smoke-test-gateway.ps1 `

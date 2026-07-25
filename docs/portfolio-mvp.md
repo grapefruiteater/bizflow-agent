@@ -10,7 +10,7 @@
 
 | 段階 | 状態 | 内容 |
 |---|---|---|
-| AgentCore Runtime | AWSで稼働済み | Nova 2 Lite、Gateway読み取りツール、Code Interpreter、短期Memory、構造化提案、`PROD` Endpoint確認済み |
+| AgentCore Runtime | AWSで稼働済み | Version 8、Nova 2 Lite、Gateway読み取りツール、Code Interpreter、短期・利用者別長期Memory、構造化提案 |
 | 架空業務データ | ローカル実装済み | 個人情報を含まないCSVとMarkdownの社内ルール |
 | Lambda業務ツール | CDK・ローカル実装済み | Gateway Lambda target互換の5ツール、S3/DynamoDB adapter、読み取り・書き込み関数の分離 |
 | Human-in-the-loop境界 | AWSへ反映・検証済み | DynamoDBで未承認拒否、承認後改変拒否、重複登録防止、監査記録 |
@@ -18,7 +18,7 @@
 | Runtimeからのツール選択 | AWSへ反映済み | Version 6でSigV4 MCP clientから4つの読み取りツールだけを公開 |
 | 承認バックエンドLambda | AWSへdeploy・検証済み | Gatewayから分離し、承認要求・承認・却下・状態取得を処理 |
 | Code Interpreter | AWSへ反映・検証済み | Version 6への更新時も自動スモークテスト成功 |
-| AgentCore Memory | 短期はAWS、長期はローカル実装済み | 同一Runtime sessionの2ターン保存・再取得に成功。Cognito利用者別User PreferenceはAWS反映前 |
+| AgentCore Memory | AWSへ反映・E2E検証済み | session短期MemoryとCognito利用者別User PreferenceをVersion 8で確認 |
 | Next.js Web/BFF | AWSへdeploy・E2E検証済み | ダッシュボード、Agentチャット、承認カード、タスク登録、履歴画面 |
 | Web Foundation | AWSへdeploy済み | Web用ECR、2 AZのVPC、Cognito、ALB、Route 53、WAF、ECS ClusterとOutputsを確認済み |
 | Web Service / Fargate | AWSへdeploy・E2E検証済み | ARM64イメージ、private subnet、Cognito認証Listener Rule、最小権限Task Role |
@@ -109,10 +109,11 @@ Agentは`proposed_actions`として問い合わせID、担当者、期限、対�
 14. 完了: Web Foundation、Web Service、BFF用Lambda更新をdeployし、Cognitoログインからタスク登録・監査履歴までE2E検証する。
 15. 完了: Agentの構造化提案、BFF契約検証、承認カード自動反映を追加する。
 16. 完了: 構造化提案対応RuntimeとWebを更新し、承認・タスク登録までE2Eを再確認する。
-17. ローカル完了・AWS反映前: Cognitoの信頼済み利用者IDを使うUser Preference strategyとBFF委任を追加する。
-18. Memory Stack、Runtime、Web Serviceの順に反映し、別conversationと別利用者で長期Memory分離をE2E確認する。
-19. 信頼できるtenant claimを導入してから、会社共有Memoryを利用者Memoryと別namespaceで追加する。
-20. タスク登録はBFF経路に限定し、RuntimeのMCP書き込みallow-listは必要性を再評価する。
+17. 完了: Cognitoの信頼済み利用者IDを使うUser Preference strategyとBFF委任を追加する。
+18. 完了: Memory Stack、Runtime Version 8、Web Serviceへ反映し、別conversationと別利用者で長期Memory分離をE2E確認する。
+19. ローカル第1段階完了・AWS反映前: Write LambdaでGateway contextを拒否し、既存Write targetのDeletionPolicyを`Delete`へ変更する。
+20. 第1段階反映後: Gateway Write targetと書き込みtool schemaを削除し、4つの読み取りツールだけを公開する。
+21. 信頼できるtenant claimを導入する場合だけ、会社共有Memoryを利用者Memoryと別namespaceで追加する。
 
 Tools Stackのリソース、IAM境界、データモデル、Outputs、反映前確認は [`tools-infrastructure.md`](tools-infrastructure.md) にまとめています。
 

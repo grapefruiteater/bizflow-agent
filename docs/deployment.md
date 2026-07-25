@@ -4,7 +4,7 @@
 
 開いている `bizflow-agent` リポジトリをそのまま使用します。スクリプトは自身の配置場所からリポジトリルートを解決するため、絶対パスをソースコードへ埋め込みません。
 
-この文書の中心は既存AgentCore Runtimeのコンテナ公開です。ポートフォリオ用のS3、DynamoDB、Lambda、AgentCore Gateway、承認バックエンド、Code Interpreter、短期MemoryはAWSへdeploy・検証済みです。Web FoundationとWeb Serviceもdeploy済みで、2026-07-24にCognitoログインから構造化提案のカード反映、承認、タスク登録、監査履歴までのAWS E2Eを確認しました。Cognito利用者別User Preference Memoryはローカル実装・検証済みで、Memory Stack、Runtime、WebのAWS更新前です。ツール基盤は [`tools-infrastructure.md`](tools-infrastructure.md)、Code Interpreterは [`code-interpreter.md`](code-interpreter.md)、Memoryは [`memory.md`](memory.md)、Webは [`web-application.md`](web-application.md)、全体の実装順序は [`portfolio-mvp.md`](portfolio-mvp.md) を参照してください。
+この文書の中心は既存AgentCore Runtimeのコンテナ公開です。ポートフォリオ用のS3、DynamoDB、Lambda、AgentCore Gateway、承認バックエンド、Code Interpreter、短期・利用者別長期MemoryはAWSへdeploy・検証済みです。Web FoundationとWeb Serviceもdeploy済みで、2026-07-25にCognitoログインから長期設定取得、構造化提案、承認、タスク登録、監査履歴までのAWS E2Eを確認しました。次のAWS更新対象はGateway Write target廃止の第1段階です。ツール基盤は [`tools-infrastructure.md`](tools-infrastructure.md)、Code Interpreterは [`code-interpreter.md`](code-interpreter.md)、Memoryは [`memory.md`](memory.md)、Webは [`web-application.md`](web-application.md)、全体の実装順序は [`portfolio-mvp.md`](portfolio-mvp.md) を参照してください。
 
 開発・デプロイ環境は次の構成です。
 
@@ -18,13 +18,13 @@
 
 以前のアプリやCDKスタックで作成したAWSリソースは再利用しません。今回のBizFlowアプリ専用CDKスタックとしてECR、IAMロール、ログ、ネットワーク設定、初期AgentCore Runtime、`PROD` Endpointを新規作成します。通常のアプリ更新では `cdk deploy` を実行せず、Dockerイメージのbuild/push、`UpdateAgentRuntime`、`PROD` Endpoint更新を使用します。サービス管理の`DEFAULT` Endpointは常に最新Versionを指すため、本番トラフィックには使用しません。
 
-> 2026-07-22時点ではRuntime Version 6が`PROD`で稼働し、Gateway URLを設定した読み取り専用分析、Code Interpreter、短期Memoryが有効です。通常呼び出し、Code Interpreter、同一session IDによるMemoryの2ターン保存・再取得がすべて成功しています。旧Version 5へ戻すロールバックコマンドはデプロイ記録に保存されています。
+> 2026-07-25時点ではRuntime Version 8が`PROD`で稼働し、Gateway読み取り専用分析、Code Interpreter、短期Memory、Cognito利用者別User Preferenceが有効です。通常・Code Interpreter・短期MemoryスモークテストとWeb長期Memory E2Eが成功しています。旧Version 7へ戻すロールバックコマンドはデプロイ記録に保存されています。
 
 ## BizFlow専用AWS基盤の新規作成
 
 ### 現在の状態
 
-CDKソースは `infra` に実装済みです。AgentCore Foundation、Runtime、サービス管理`DEFAULT`、明示昇格用`PROD` Endpoint、Tools、短期Memory、Web Foundation、Web Serviceのデプロイは完了しています。`PROD`へのモデル応答、構造化提案、Webの承認フローもユーザーがAWS環境で確認済みです。採用モデルは `jp.amazon.nova-2-lite-v1:0` です。次のAWS更新対象は利用者別User Preference Memoryです。
+CDKソースは `infra` に実装済みです。AgentCore Foundation、Runtime、サービス管理`DEFAULT`、明示昇格用`PROD` Endpoint、Tools、短期・利用者別長期Memory、Web Foundation、Web Serviceのデプロイは完了しています。`PROD`へのモデル応答、構造化提案、長期Memory、Webの承認フローもユーザーがAWS環境で確認済みです。採用モデルは `jp.amazon.nova-2-lite-v1:0` です。
 
 `config/cdk-outputs.json` はBizFlow専用スタックの実環境Outputsです。環境固有情報を含むためGit管理せず、Runtime Stackをdeployしたときだけ更新します。形式例は `config/agentcore.example.json` に保持します。
 

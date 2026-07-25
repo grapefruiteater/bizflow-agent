@@ -1,4 +1,4 @@
-"""AWS Lambda entry point for the BizFlow AgentCore Gateway target."""
+"""AWS Lambda entry point for Gateway reads and trusted BFF operations."""
 
 from __future__ import annotations
 
@@ -17,11 +17,12 @@ LOGGER.setLevel(logging.INFO)
 SERVICE = build_service_from_environment()
 TOOL_DELIMITER = "___"
 ALLOWED_TOOLS_ENV = "BIZFLOW_ALLOWED_TOOLS"
+ALLOW_GATEWAY_CONTEXT_ENV = "BIZFLOW_ALLOW_GATEWAY_CONTEXT"
 BFF_SOURCE = "bizflow-web-bff"
 
 
 def lambda_handler(event: Any, context: Any) -> dict[str, Any]:
-    """Dispatch a Gateway Lambda target invocation to one of five tools."""
+    """Dispatch an allowed Gateway-read or trusted BFF invocation."""
 
     try:
         tool_name, arguments = resolve_invocation(event, context)
@@ -69,8 +70,14 @@ def get_tool_handlers() -> dict[str, Callable[[Mapping[str, Any]], dict[str, Any
 def get_allowed_tools() -> set[str]:
     configured = os.environ.get(ALLOWED_TOOLS_ENV, "").strip()
     if not configured:
-        return set(get_tool_handlers())
+        return set()
     return {name.strip() for name in configured.split(",") if name.strip()}
+
+
+def gateway_context_is_allowed() -> bool:
+    """Fail closed unless this Lambda is explicitly configured as a target."""
+
+    return os.environ.get(ALLOW_GATEWAY_CONTEXT_ENV, "").strip().lower() == "true"
 
 
 def require_arguments(event: Any) -> Mapping[str, Any]:
@@ -94,13 +101,18 @@ def resolve_invocation(
     client_context = getattr(context, "client_context", None)
     custom = getattr(client_context, "custom", None)
     if isinstance(custom, Mapping):
+        if not gateway_context_is_allowed():
+            raise BusinessToolError(
+                "GATEWAY_WRITE_DISABLED",
+                "Write operations are available only through the trusted BizFlow Web BFF.",
+            )
         return get_gateway_tool_name(context), require_arguments(event)
 
     request = require_arguments(event)
     if request.get("source") != BFF_SOURCE:
         raise BusinessToolError(
             "INVALID_CONTEXT",
-            "AgentCore Gateway context or the trusted BFF envelope is required.",
+            "An allowed AgentCore Gateway context or the trusted BFF envelope is required.",
         )
     operation = require_text(request.get("operation"), "operation", 64)
     arguments = require_arguments(request.get("arguments"))

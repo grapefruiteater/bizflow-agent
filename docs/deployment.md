@@ -4,7 +4,7 @@
 
 開いている `bizflow-agent` リポジトリをそのまま使用します。スクリプトは自身の配置場所からリポジトリルートを解決するため、絶対パスをソースコードへ埋め込みません。
 
-この文書の中心は既存AgentCore Runtimeのコンテナ公開です。ポートフォリオ用のS3、DynamoDB、Lambda、AgentCore Gateway、承認バックエンド、Code Interpreter、短期・利用者別長期MemoryはAWSへdeploy・検証済みです。Web FoundationとWeb Serviceもdeploy済みで、2026-07-25にCognitoログインから長期設定取得、構造化提案、承認、タスク登録、監査履歴までのAWS E2Eを確認しました。Gateway Write target廃止の第1段階はAWSへ反映済みで、第2段階のtarget削除はローカル実装済み・AWS反映前です。ツール基盤は [`tools-infrastructure.md`](tools-infrastructure.md)、Code Interpreterは [`code-interpreter.md`](code-interpreter.md)、Memoryは [`memory.md`](memory.md)、Webは [`web-application.md`](web-application.md)、全体の実装順序は [`portfolio-mvp.md`](portfolio-mvp.md) を参照してください。
+この文書の中心は既存AgentCore Runtimeのコンテナ公開です。ポートフォリオ用のS3、DynamoDB、Lambda、AgentCore Gateway、承認バックエンド、Code Interpreter、短期・利用者別長期MemoryはAWSへdeploy・検証済みです。Web FoundationとWeb Serviceもdeploy済みで、2026-07-25にCognitoログインから長期設定取得、構造化提案、承認、タスク登録、監査履歴までのAWS E2Eを確認しました。Gateway Write target廃止の第1・第2段階もAWSへ反映済みで、Gatewayの読み取り専用4ツールとWeb/BFF専用書き込み経路を再検証しました。ツール基盤は [`tools-infrastructure.md`](tools-infrastructure.md)、Code Interpreterは [`code-interpreter.md`](code-interpreter.md)、Memoryは [`memory.md`](memory.md)、Webは [`web-application.md`](web-application.md)、全体の実装順序は [`portfolio-mvp.md`](portfolio-mvp.md) を参照してください。
 
 開発・デプロイ環境は次の構成です。
 

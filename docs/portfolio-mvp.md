@@ -14,7 +14,7 @@
 | 架空業務データ | ローカル実装済み | 個人情報を含まないCSVとMarkdownの社内ルール |
 | Lambda業務ツール | CDK・ローカル実装済み | Gateway読み取り4ツール、BFF専用書き込み処理、S3/DynamoDB adapter、読み取り・書き込み関数の分離 |
 | Human-in-the-loop境界 | AWSへ反映・検証済み | DynamoDBで未承認拒否、承認後改変拒否、重複登録防止、監査記録 |
-| S3・DynamoDB・Lambda・Gateway | AWSへdeploy済み | 2026-07-22に初期反映、2026-07-24にWeb BFF直接呼び出し形式を更新 |
+| S3・DynamoDB・Lambda・Gateway | AWSへdeploy・検証済み | 2026-07-25にWrite targetを削除し、Gatewayを読み取り専用4ツールへ限定 |
 | Runtimeからのツール選択 | AWSへ反映済み | Version 6でSigV4 MCP clientから4つの読み取りツールだけを公開 |
 | 承認バックエンドLambda | AWSへdeploy・検証済み | Gatewayから分離し、承認要求・承認・却下・状態取得を処理 |
 | Code Interpreter | AWSへ反映・検証済み | Version 6への更新時も自動スモークテスト成功 |
@@ -112,7 +112,7 @@ Agentは`proposed_actions`として問い合わせID、担当者、期限、対�
 17. 完了: Cognitoの信頼済み利用者IDを使うUser Preference strategyとBFF委任を追加する。
 18. 完了: Memory Stack、Runtime Version 8、Web Serviceへ反映し、別conversationと別利用者で長期Memory分離をE2E確認する。
 19. 完了・AWS反映済み: Write LambdaでGateway contextを拒否し、既存Write targetのDeletionPolicyを`Delete`へ変更する。
-20. ローカル実装済み・AWS反映前: Gateway Write targetと書き込みtool schemaを削除し、4つの読み取りツールだけを公開する。
+20. 完了・AWS反映済み: Gateway Write targetと書き込みtool schemaを削除し、4つの読み取りツールだけを公開する。Gateway直接スモークテストとWeb E2Eも再確認済み。
 21. 信頼できるtenant claimを導入する場合だけ、会社共有Memoryを利用者Memoryと別namespaceで追加する。
 
 Tools Stackのリソース、IAM境界、データモデル、Outputs、反映前確認は [`tools-infrastructure.md`](tools-infrastructure.md) にまとめています。

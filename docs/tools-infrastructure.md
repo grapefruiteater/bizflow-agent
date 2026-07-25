@@ -4,9 +4,9 @@
 
 `BizFlowAgentToolsStack`のCDKソース、Lambda処理、S3/DynamoDB adapter、ユニットテストは実装済みです。TypeScript型チェック、CDKテンプレートテスト、`--no-lookups`付きローカルsynthも成功しています。
 
-S3、DynamoDB、読み取り／書き込みLambda、Gatewayは2026-07-22にAWSへdeploy済みで、環境別OutputsはGit管理対象外の`config/tools-outputs.json`へ保存されています。AgentCore Runtime Version 8にはGateway URLが設定され、`PROD` Endpointから4つの読み取りツールを利用できます。Gateway直接スモークテスト、Runtimeスモークテスト、CloudWatch Logsへの出力を確認済みです。
+S3、DynamoDB、読み取り／書き込みLambda、Gatewayは2026-07-22にAWSへdeploy済みで、環境別OutputsはGit管理対象外の`config/tools-outputs.json`へ保存されています。AgentCore Runtime Version 8にはGateway URLが設定され、`PROD` Endpointから4つの読み取りツールを利用できます。2026-07-25にGateway Write target廃止のPhase 2をAWSへ反映し、Gatewayの生の`tools/list`が4ツールだけを返すこと、問い合わせ取得・集計・ルール検索、Web承認フローを再確認しました。
 
-タスク登録はWeb/BFFからWrite Lambdaを直接呼び出す経路だけを使用します。Gateway経由の書き込みをLambdaでも拒否し、既存Write targetのDeletionPolicyを`Delete`へ変える第1段階はAWSへ反映・検証済みです。第2段階としてWrite targetとGateway用書き込みschemaをローカルソースから削除済みで、次のTools Stack更新後はGatewayの`tools/list`が読み取り専用4ツールだけになります。
+タスク登録はWeb/BFFからWrite Lambdaを直接呼び出す経路だけを使用します。Gateway経由の書き込みをLambdaでも拒否し、既存Write targetのDeletionPolicyを`Delete`へ変える第1段階と、Write targetおよびGateway用書き込みschemaを削除する第2段階は、どちらもAWSへ反映・検証済みです。
 
 Web BFFだけが呼び出す承認バックエンドLambdaもAWSへdeploy済みです。Outputsは9つとなり、`ApprovalWorkflowFunctionName`と`ApprovalWorkflowFunctionArn`が追加されています。承認要求・承認・DynamoDB監査履歴の実環境テストも完了しています。2026-07-24には、Next.js BFFからRead/Write Lambdaを直接呼び出す専用envelopeをTools Stackへ反映し、Web Serviceから分析、承認、タスク登録、監査履歴までのAWS E2Eを確認しました。
 
@@ -29,7 +29,7 @@ CDKアプリでは`enableTools`の既定値を`false`にしています。次を
 | Read Lambda | 4つの読み取りツールを処理 | S3 `GetObject`、DynamoDB `GetItem`/`Query`のみ |
 | Write Lambda | BFFからの`create_business_task`だけを処理 | DynamoDB `GetItem`/`PutItem`/`Query`/`UpdateItem`のみ。Gateway contextは拒否 |
 | Approval Lambda | BFFから承認要求・承認・却下・状態取得を処理 | DynamoDB `GetItem`/`PutItem`/`Query`/`UpdateItem`のみ。Gateway非公開 |
-| AgentCore Gateway | 読み取りLambdaを4つのMCPツールとして公開 | IAM認証、MCP `2025-06-18`。Write targetはローカルソースから削除済み |
+| AgentCore Gateway | 読み取りLambdaを4つのMCPツールとして公開 | IAM認証、MCP `2025-06-18`。Write targetはAWSから削除済み |
 | Runtime IAM Policy | importした既存RuntimeロールからGatewayを呼び出す | 対象Gateway ARNへの`bedrock-agentcore:InvokeGateway`のみ |
 | CloudWatch Logs | Lambdaログ | 30日保持、Log Groupは削除時retain |
 
@@ -51,9 +51,9 @@ Write Lambdaでは`create_business_task`だけを許可します。`BIZFLOW_ALLO
 既存`BizFlowWriteTools` targetは当初`DeletionPolicy: Retain`で作成されました。そのままCDKテンプレートから削除すると、CloudFormation Stackから外れてもAgentCore Gateway上にtargetが残るため、次の2段階で廃止します。
 
 1. 完了・AWS反映済み: targetを残したままDeletionPolicyを`Delete`へ変更し、Write Lambdaへ`BIZFLOW_ALLOW_GATEWAY_CONTEXT=false`を設定する。
-2. ローカル実装済み・AWS反映前: 第1段階のStack更新完了後、targetをCDKテンプレートとGateway用schemaから削除する。
+2. 完了・AWS反映済み: 第1段階のStack更新完了後、targetをCDKテンプレートとGateway用schemaから削除する。
 
-第1段階の時点でGatewayからの書き込みはLambdaでも`GATEWAY_WRITE_DISABLED`として拒否されます。第2段階後は`tools/list`にも`create_business_task`が表示されません。Write Lambda、DynamoDB権限、Web Task Roleからの直接呼び出しは維持するため、承認済みタスク登録のWeb E2Eには影響しません。
+第1段階ではGatewayからの書き込みがLambdaでも`GATEWAY_WRITE_DISABLED`として拒否され、第2段階後は`tools/list`にも`create_business_task`が表示されません。Write Lambda、DynamoDB権限、Web Task Roleからの直接呼び出しは維持しており、Phase 2反映後も承認済みタスク登録のWeb E2Eが正常に完了することを確認済みです。
 
 AgentCore GatewayのLambda targetは、呼び出すツール名をLambda contextの`bedrockAgentCoreToolName`へ設定します。handlerはtarget prefixを除いたツール名を検証してから処理を選択します。詳細は[AWS公式のLambda target手順](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-add-target-lambda.html)を参照してください。
 
@@ -145,7 +145,7 @@ Tools Stackの初回反映では、対象Account、Region、作成リソース�
 17. 完了: Web Serviceをdeployし、BFF Task Roleへ対象Runtimeと3つのLambdaだけのinvoke権限を付与する。
 18. 完了: Web E2Eで未承認拒否、承認後登録、監査履歴を確認する。
 19. 完了: Write LambdaのGateway context拒否とWrite targetのDeletionPolicy変更をAWSへ反映し、Gateway拒否とWeb E2Eを再確認する。
-20. ローカル実装済み・AWS反映前: Write targetとGateway用書き込みschemaを削除し、Gatewayを読み取り専用4ツールへ限定する。
+20. 完了: Write targetとGateway用書き込みschemaを削除してAWSへ反映し、Gatewayの4ツールとWeb承認・タスク登録E2Eを再確認する。
 
 新規環境で同じTools Stackを構築する場合のコマンド例です。
 

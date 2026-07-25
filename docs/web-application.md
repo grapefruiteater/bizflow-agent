@@ -12,6 +12,8 @@ Agentの文章から承認内容を推測する処理は行いません。Runtim
 
 BFFが検証済みCognito identityから不透明な`runtimeUserId`を導出し、利用者別AgentCore Memoryへ委任する処理もAWSへ反映済みです。別conversationでのUser Preference取得、利用者分離、CloudWatch Logsの`user_scoped=True`と長期抽出を確認しました。
 
+2026-07-25にAgentCore Gatewayの旧Write targetをAWSから削除した後も、分析、承認依頼、承認、Write Lambdaによるタスク登録、監査履歴までのWeb E2Eが正常に完了することを再確認しました。これにより、Gatewayは読み取り専用4ツール、書き込みはCognito認証済みWeb/BFFだけという境界がAWS上でも成立しています。
+
 ## 構成
 
 ```text
@@ -101,7 +103,7 @@ BFF境界で不正なRuntime応答を検出した場合は`INVALID_AGENT_RESPONS
 - Write Lambda/DynamoDBでも`APPROVED`状態、提案一致、冪等性を再検証する。
 - RuntimeのMCP allow-listには引き続き`create_business_task`を含めない。
 
-Lambdaへ渡す`source: bizflow-web-bff`はrequest形式の識別子であり、認証情報ではありません。Lambda直接呼び出しの認可境界はTask Roleの`lambda:InvokeFunction`です。Gatewayから呼ばれた場合は従来どおりGateway contextのツール名を優先します。
+Lambdaへ渡す`source: bizflow-web-bff`はrequest形式の識別子であり、認証情報ではありません。Lambda直接呼び出しの認可境界はTask Roleの`lambda:InvokeFunction`です。Read LambdaはGateway contextのツール名を検証して処理し、Write LambdaはGateway contextを拒否します。
 
 ## ローカル実行
 

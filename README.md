@@ -8,7 +8,7 @@ AWS基盤は、以前のアプリやCDKスタックで作成したリソース�
 
 ## 現在の状態
 
-2026-07-25時点では、AgentCore Runtime Version 8がAWSの`PROD` Endpointで稼働しています。RuntimeはAmazon Nova 2 Lite、AgentCore Gatewayの読み取りツール、AWS管理Code Interpreter、session短期Memory、Cognito利用者別User Preference Memoryを使用できます。通常呼び出し、Code Interpreter、短期Memoryの2ターン保存・再取得、別conversationでの長期設定取得、構造化提案を検証済みです。Next.js Web/BFFもECS/Fargateへdeploy済みで、Cognitoログイン、利用者別Memory、承認カード、承認、タスク登録、監査履歴までのAWS E2Eを確認済みです。
+2026-07-25時点では、AgentCore Runtime Version 8がAWSの`PROD` Endpointで稼働しています。RuntimeはAmazon Nova 2 Lite、AgentCore Gatewayの読み取り専用4ツール、AWS管理Code Interpreter、session短期Memory、Cognito利用者別User Preference Memoryを使用できます。通常呼び出し、Code Interpreter、短期Memoryの2ターン保存・再取得、別conversationでの長期設定取得、構造化提案を検証済みです。Gateway Write targetの2段階廃止もAWSへ反映し、`tools/list`が読み取り専用4ツールだけを返すことを確認しました。Next.js Web/BFFもECS/Fargateへdeploy済みで、Cognitoログイン、利用者別Memory、承認カード、承認、タスク登録、監査履歴までのAWS E2Eを再確認済みです。
 
 | 項目 | 状態 |
 |---|---|
@@ -16,7 +16,7 @@ AWS基盤は、以前のアプリやCDKスタックで作成したリソース�
 | Runtimeイメージ | GitコミットSHAタグ、ECR digest固定 |
 | Bedrockモデル | `jp.amazon.nova-2-lite-v1:0` |
 | Gateway読み取りツール | 4ツールをRuntimeへ接続済み |
-| Gateway書き込みツール | 第1段階をAWS反映・検証済み。Write target削除をローカル実装済み（AWS反映前） |
+| Gateway書き込みツール | Phase 2をAWS反映・検証済み。Write targetとGateway用schemaから削除 |
 | S3・DynamoDB・Lambda・Gateway | `BizFlowAgentToolsStack`としてdeploy済み |
 | Web BFF用Lambda直接呼び出し | 2026-07-24にTools Stackへ反映済み |
 | CloudWatch Logs | `PROD`の呼び出しログを確認済み |
@@ -46,7 +46,7 @@ AgentCore Runtimeが要求する次のHTTP Endpointを実装しています。
 
 Runtime環境変数`BIZFLOW_GATEWAY_URL`は`config/tools-outputs.json`から公開スクリプトが設定し、ソースへ固定しません。Gateway未設定時は呼び出し元が渡した情報だけを分析するモードへ戻せます。タスク登録、データ更新、承認、外部送信はRuntimeから実行しません。
 
-架空の問い合わせCSV、社内ルール、AgentCore Gatewayの読み取り4ツール、BFF専用のタスク登録処理、S3/DynamoDB adapter、読み取り・書き込みLambdaを分離した`BizFlowAgentToolsStack`は2026-07-22にAWSへdeploy済みです。Gateway直接スモークテストと、読み取りツールを有効化したRuntime Version 6以降のリモートスモークテストも完了しています。
+架空の問い合わせCSV、社内ルール、AgentCore Gatewayの読み取り4ツール、BFF専用のタスク登録処理、S3/DynamoDB adapter、読み取り・書き込みLambdaを分離した`BizFlowAgentToolsStack`はAWSへdeploy済みです。2026-07-25には旧Write targetを削除し、Gatewayの生の`tools/list`が4ツールだけを返すこと、問い合わせ取得・集計・ルール検索、Webからの承認・タスク登録・監査履歴を再確認しました。
 
 Web/BFFだけが呼び出す承認バックエンドLambdaもAWSへdeploy済みです。承認要求、状態確認、承認、DynamoDB監査履歴が正常に機能することを確認しました。このLambdaはAgentCore Gateway targetには登録せず、モデルから到達できない境界を維持しています。Next.js BFFはこの承認を取得してから承認内容をWrite Lambdaへ渡すため、モデル自身へ書き込みツールを公開しません。Web実装は [`docs/web-application.md`](docs/web-application.md)、承認契約は [`docs/approval-workflow.md`](docs/approval-workflow.md) を参照してください。
 

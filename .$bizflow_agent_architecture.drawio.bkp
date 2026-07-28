@@ -1,0 +1,460 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2026-07-25T00:00:00.000Z" agent="Codex" version="26.0.9" type="device" pages="2">
+  <diagram id="bizflow-current-architecture" name="01_AWSシステム構成">
+    <mxGraphModel dx="2100" dy="1180" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2200" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="p1-title" value="BizFlow Agent｜現在のAWSシステム構成" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#232F3E;strokeColor=#232F3E;fontColor=#FFFFFF;fontSize=26;fontStyle=1;align=left;spacingLeft=28;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="30" y="20" width="2120" height="82" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-subtitle" value="DEPLOYED / VERIFIED  2026-07-25　　AgentCore Runtime Version 8 → PROD　　Model: jp.amazon.nova-2-lite-v1:0" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E9F3FA;strokeColor=#146EB4;fontColor=#16324F;fontSize=14;fontStyle=1;align=left;spacingLeft=20;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="30" y="112" width="2120" height="46" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1-user-zone" value="利用者" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F7F7F7;strokeColor=#687078;strokeWidth=2;fontColor=#232F3E;fontSize=16;fontStyle=1;verticalAlign=top;spacingTop=14;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="30" y="190" width="180" height="690" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-browser" value="ブラウザ&#xa;一般利用者 / 承認者" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#687078;strokeWidth=2;fontColor=#232F3E;fontSize=15;fontStyle=1;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="55" y="330" width="130" height="92" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-roles" value="Cognito Group&#xa;BizFlowUsers&#xa;BizFlowApprovers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF7E6;strokeColor=#D86613;fontColor=#5A2A00;fontSize=12;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="55" y="470" width="130" height="94" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1-aws" value="AWS Cloud" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=16;fontStyle=1;container=1;pointerEvents=0;collapsible=0;recursiveResize=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_aws_cloud;strokeColor=#232F3E;strokeWidth=2;fillColor=none;verticalAlign=top;align=left;spacingLeft=36;spacingTop=8;fontColor=#232F3E;dashed=0;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="240" y="180" width="1910" height="790" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-region" value="AWS Region  ap-northeast-1" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=14;fontStyle=1;container=1;pointerEvents=0;collapsible=0;recursiveResize=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_region;strokeColor=#00A4A6;fillColor=none;verticalAlign=top;align=left;spacingLeft=36;spacingTop=8;fontColor=#147EBA;dashed=1;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="255" y="205" width="1880" height="745" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1-edge-zone" value="Edge services / Identity" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#DD344C;strokeWidth=1.5;dashed=1;fontColor=#DD344C;fontSize=13;fontStyle=1;verticalAlign=top;align=left;spacingTop=8;spacingLeft=12;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="275" y="225" width="650" height="128" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-route53" value="Amazon Route 53" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#8C4FFF;strokeColor=#FFFFFF;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.route_53;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="310" y="257" width="64" height="64" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-waf-acm" value="AWS WAF" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#DD344C;strokeColor=#FFFFFF;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.waf;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="460" y="257" width="64" height="64" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-acm" value="AWS Certificate Manager" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#DD344C;strokeColor=#FFFFFF;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=10;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.certificate_manager_3;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="610" y="257" width="64" height="64" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-cognito" value="Amazon Cognito" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#DD344C;strokeColor=#FFFFFF;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cognito;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="790" y="257" width="64" height="64" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1-vpc" value="Amazon VPC  /  2 Availability Zones" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=14;fontStyle=1;container=1;pointerEvents=0;collapsible=0;recursiveResize=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_vpc2;strokeColor=#8C4FFF;strokeWidth=2;fillColor=none;verticalAlign=top;align=left;spacingLeft=36;spacingTop=8;fontColor=#8C4FFF;dashed=0;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="275" y="375" width="650" height="360" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-public-subnets" value="Public subnets × 2 AZ" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=12;fontStyle=0;container=1;pointerEvents=0;collapsible=0;recursiveResize=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_security_group;grStroke=0;strokeColor=#7AA116;fillColor=#F2F6E8;verticalAlign=top;align=left;spacingLeft=30;spacingTop=7;fontColor=#248814;dashed=0;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="300" y="425" width="250" height="270" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-private-subnets" value="Private subnets × 2 AZ" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=12;fontStyle=0;container=1;pointerEvents=0;collapsible=0;recursiveResize=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_security_group;grStroke=0;strokeColor=#00A4A6;fillColor=#E6F6F7;verticalAlign=top;align=left;spacingLeft=30;spacingTop=7;fontColor=#147EBA;dashed=0;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="575" y="425" width="320" height="270" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-alb" value="Application Load Balancer&#xa;HTTPS + Cognito auth" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];sketch=0;outlineConnect=0;fontColor=#232F3E;strokeColor=none;fillColor=#8C4FFF;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;whiteSpace=wrap;fontSize=11;fontStyle=0;spacing=3;aspect=fixed;shape=mxgraph.aws4.application_load_balancer;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="385" y="485" width="76" height="76" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-nat" value="NAT Gateway × 1" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];sketch=0;outlineConnect=0;fontColor=#232F3E;strokeColor=#FFFFFF;fillColor=#8C4FFF;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;whiteSpace=wrap;fontSize=11;fontStyle=0;spacing=3;aspect=fixed;shape=mxgraph.aws4.nat_gateway;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="390" y="605" width="68" height="68" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-ecs" value="AWS Fargate&#xa;Next.js Web / BFF" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#ED7100;strokeColor=#FFFFFF;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.fargate;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="665" y="490" width="78" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-task-role" value="AWS IAM&#xa;ECS Task Role" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#DD344C;strokeColor=#FFFFFF;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.identity_and_access_management;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="790" y="490" width="68" height="68" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-web-ecr" value="Amazon ECR&#xa;bizflow-web" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#ED7100;strokeColor=#FFFFFF;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.ecr;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="520" y="760" width="64" height="64" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1-ecr-zone" value="Container image repositories  /  immutable Git SHA tags・scan-on-push・digest固定" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#ED7100;strokeWidth=1.5;dashed=1;fontColor=#ED7100;fontSize=12;fontStyle=1;verticalAlign=top;align=left;spacingTop=7;spacingLeft=12;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="275" y="745" width="650" height="95" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-agentcore" value="Generative AI / Amazon Bedrock AgentCore" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F3FBF9;strokeColor=#01A88D;strokeWidth=2;fontColor=#007A68;fontSize=15;fontStyle=1;verticalAlign=top;align=left;spacingTop=10;spacingLeft=15;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="955" y="225" width="650" height="605" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-runtime" value="AgentCore Runtime&#xa;Version 8 → PROD" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#01A88D;strokeColor=#FFFFFF;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.bedrock_agentcore;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="300" width="78" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-bedrock" value="Amazon Bedrock&#xa;Nova 2 Lite" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#01A88D;strokeColor=#FFFFFF;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.bedrock;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1380" y="300" width="78" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-gateway" value="AgentCore Gateway&#xa;MCP / READ ONLY" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#01A88D;strokeColor=#FFFFFF;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.bedrock_agentcore;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1020" y="490" width="70" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-memory" value="AgentCore Memory&#xa;Session + User Preference" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#01A88D;strokeColor=#FFFFFF;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=10;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.bedrock_agentcore;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1260" y="490" width="70" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-code" value="Code Interpreter&#xa;Python集計・検算" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#01A88D;strokeColor=#FFFFFF;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=10;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.bedrock_agentcore;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1470" y="490" width="70" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-agent-ecr" value="Amazon ECR&#xa;bizflow-agent / ARM64" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#ED7100;strokeColor=#FFFFFF;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.ecr;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="730" y="760" width="64" height="64" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-output-contract" value="Runtime: FastAPI / Strands / linux-arm64 / :8080 / POST /invocations / GET /ping&#xa;構造化出力 contract v1.0: response + proposed_actions　※ Runtimeは書き込みを実行しない" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#01A88D;fontColor=#006B5D;fontSize=11;fontStyle=1;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="985" y="670" width="585" height="90" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1-tools" value="Business tools / Data layer" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F7F7F7;strokeColor=#687078;strokeWidth=1.5;fontColor=#232F3E;fontSize=15;fontStyle=1;verticalAlign=top;align=left;spacingTop=10;spacingLeft=15;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1635" y="225" width="485" height="605" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-read-lambda" value="AWS Lambda&#xa;Read tools" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#ED7100;strokeColor=#FFFFFF;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1680" y="285" width="68" height="68" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-approval-lambda" value="AWS Lambda&#xa;Approval workflow" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#ED7100;strokeColor=#FFFFFF;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=10;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1845" y="285" width="68" height="68" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-s3" value="Amazon S3&#xa;CSV + company rules" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#7AA116;strokeColor=#FFFFFF;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=10;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.s3;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1740" y="470" width="72" height="72" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-write-lambda" value="AWS Lambda&#xa;Write tools" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#ED7100;strokeColor=#FFFFFF;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="2000" y="285" width="68" height="68" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-ddb" value="Amazon DynamoDB&#xa;Approval / Task / Audit&#xa;PK/SK + entity_type GSI" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#C925D1;strokeColor=#FFFFFF;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=10;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.dynamodb;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1960" y="470" width="72" height="72" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-gateway-tools" value="Gateway: get_business_requests / analyze_request_data / search_company_rules / get_task_status&#xa;BFF direct: approval API / create_business_task / dashboard metrics　※ write targetは削除済み" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#687078;fontColor=#232F3E;fontSize=10;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1670" y="665" width="415" height="95" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1-observability" value="Management / Observability" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F7F7F7;strokeColor=#687078;strokeWidth=1.5;fontColor=#232F3E;fontSize=13;fontStyle=1;verticalAlign=top;align=left;spacingTop=8;spacingLeft=12;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="955" y="835" width="1165" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-cloudwatch" value="Amazon CloudWatch&#xa;Logs / Metrics" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#E7157B;strokeColor=#FFFFFF;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=10;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cloudwatch_2;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1010" y="865" width="54" height="54" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-xray" value="AWS X-Ray&#xa;Trace" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#C925D1;strokeColor=#FFFFFF;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=10;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.xray;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1240" y="865" width="54" height="54" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-deploy-record" value="CloudWatch: Runtime PROD / ECS / Lambda logs　　AgentCore observability: tool execution / error trace　　Local deploy record: tag / digest / Runtime version" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#687078;fontColor=#232F3E;fontSize=10;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1400" y="865" width="685" height="54" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1-iac" value="Infrastructure as Code / 更新境界" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E9F3FA;strokeColor=#146EB4;strokeWidth=2;fontColor=#0B3A63;fontSize=14;fontStyle=1;verticalAlign=top;spacingTop=10;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="30" y="990" width="895" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-cdk" value="AWS CDK stacks&#xa;Foundation / Runtime / Tools / Memory&#xa;Web Foundation / Web Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#146EB4;fontColor=#0B3A63;fontSize=13;fontStyle=1;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="60" y="1030" width="290" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-runtime-update" value="通常のAgent更新&#xa;Docker buildx → ECR push → UpdateAgentRuntime&#xa;READY確認 → PROD切替 → smoke test" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#146EB4;fontColor=#0B3A63;fontSize=12;fontStyle=1;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="380" y="1030" width="310" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-web-update" value="通常のWeb更新&#xa;ARM64 image → ECR digest固定&#xa;Web Service stack更新 → health / E2E" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#146EB4;fontColor=#0B3A63;fontSize=12;fontStyle=1;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="720" y="1030" width="180" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-security-note" value="安全境界: ReadとWriteのIAMを分離 / Human-in-the-loopをLambdaでも強制 / モデルへ書き込みツールを公開しない / 生のCognito subをRuntimeへ渡さない" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4F4;strokeColor=#C62828;strokeWidth=2;fontColor=#7A1515;fontSize=14;fontStyle=1;align=left;spacingLeft=18;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="955" y="990" width="1165" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-legend" value="実線 = 呼び出し / データフロー　　破線 = 認証・実行権限・監視　　橙 = セキュリティ境界　　桃 = AgentCore / AI　　緑 = データ" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B0B7BE;fontColor=#414950;fontSize=12;align=left;spacingLeft=18;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="30" y="1140" width="2090" height="36" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1-e-user-route" value="HTTPS" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#146EB4;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;" edge="1" parent="1" source="p1-browser" target="p1-route53">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-e-route-waf" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#146EB4;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="p1-route53" target="p1-waf-acm">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-e-waf-alb" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#146EB4;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="p1-waf-acm" target="p1-alb">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-e-acm-alb" value="TLS certificate" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#DD344C;strokeWidth=1.5;dashed=1;endArrow=open;endFill=0;fontSize=10;" edge="1" parent="1" source="p1-acm" target="p1-alb">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-e-alb-cognito" value="authenticate" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#D86613;strokeWidth=2;dashed=1;endArrow=block;endFill=1;fontSize=10;" edge="1" parent="1" source="p1-alb" target="p1-cognito">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-e-alb-ecs" value="forward" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#146EB4;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;" edge="1" parent="1" source="p1-alb" target="p1-ecs">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-e-ecr-ecs" value="image" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#3F8624;dashed=1;endArrow=block;endFill=1;fontSize=10;" edge="1" parent="1" source="p1-web-ecr" target="p1-ecs">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-e-ecs-runtime" value="InvokeAgentRuntime / PROD" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#E7157B;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;" edge="1" parent="1" source="p1-ecs" target="p1-runtime">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-e-runtime-bedrock" value="inference" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#E7157B;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;" edge="1" parent="1" source="p1-runtime" target="p1-bedrock">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-e-runtime-gateway" value="MCP read tools" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#E7157B;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;" edge="1" parent="1" source="p1-runtime" target="p1-gateway">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-e-runtime-memory" value="retrieve / store" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#E7157B;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;" edge="1" parent="1" source="p1-runtime" target="p1-memory">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-e-runtime-code" value="Python analysis" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#E7157B;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;" edge="1" parent="1" source="p1-runtime" target="p1-code">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-e-agent-ecr-runtime" value="container digest" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#3F8624;dashed=1;endArrow=block;endFill=1;fontSize=10;" edge="1" parent="1" source="p1-agent-ecr" target="p1-runtime">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-e-gateway-read" value="SigV4 / invoke" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#146EB4;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;" edge="1" parent="1" source="p1-gateway" target="p1-read-lambda">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-e-read-s3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#3F8624;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="p1-read-lambda" target="p1-s3">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-e-read-ddb" value="status / count" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#3F8624;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;" edge="1" parent="1" source="p1-read-lambda" target="p1-ddb">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-e-ecs-read" value="dashboard metrics" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#D86613;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;" edge="1" parent="1" source="p1-ecs" target="p1-read-lambda">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-e-ecs-approval" value="approval API" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#D86613;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;" edge="1" parent="1" source="p1-ecs" target="p1-approval-lambda">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-e-ecs-write" value="approved proposal only" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#C62828;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;" edge="1" parent="1" source="p1-ecs" target="p1-write-lambda">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-e-approval-ddb" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#3F8624;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="p1-approval-lambda" target="p1-ddb">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-e-write-ddb" value="task + audit" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#3F8624;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;" edge="1" parent="1" source="p1-write-lambda" target="p1-ddb">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-e-taskrole" value="least privilege" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#D86613;dashed=1;endArrow=open;endFill=0;fontSize=10;" edge="1" parent="1" source="p1-task-role" target="p1-ecs">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-e-obs-runtime" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#687078;dashed=1;endArrow=open;endFill=0;" edge="1" parent="1" source="p1-runtime" target="p1-cloudwatch">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-e-obs-ecs" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#687078;dashed=1;endArrow=open;endFill=0;" edge="1" parent="1" source="p1-ecs" target="p1-cloudwatch">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1-e-obs-lambda" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#687078;dashed=1;endArrow=open;endFill=0;" edge="1" parent="1" source="p1-read-lambda" target="p1-xray">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="bizflow-logical-flow" name="02_論理フロー">
+    <mxGraphModel dx="2300" dy="1380" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2400" pageHeight="1400" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="p2-title" value="BizFlow Agent｜業務・エージェント論理フロー" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#232F3E;strokeColor=#232F3E;fontColor=#FFFFFF;fontSize=26;fontStyle=1;align=left;spacingLeft=28;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="30" y="20" width="2320" height="82" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-subtitle" value="分析はREAD ONLY、書き込みはCognito認証済みWeb/BFFとサーバー側承認検証を通過した場合のみ実行" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4F4;strokeColor=#C62828;fontColor=#7A1515;fontSize=15;fontStyle=1;align=left;spacingLeft=20;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="30" y="112" width="2320" height="48" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p2-analysis-band" value="A. 分析フェーズ（読み取り専用）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E9F3FA;strokeColor=#146EB4;strokeWidth=2;fontColor=#0B3A63;fontSize=18;fontStyle=1;align=left;verticalAlign=top;spacingTop=12;spacingLeft=18;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="30" y="185" width="2320" height="510" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-lane-user-a" value="利用者" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F7F7F7;strokeColor=#687078;fontColor=#232F3E;fontSize=14;fontStyle=1;verticalAlign=top;spacingTop=10;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="60" y="235" width="300" height="420" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-lane-web-a" value="Next.js Web / BFF" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1EAFE;strokeColor=#8C4FFF;fontColor=#3A1766;fontSize=14;fontStyle=1;verticalAlign=top;spacingTop=10;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="390" y="235" width="350" height="420" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-lane-agent-a" value="AgentCore Runtime / Nova" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FCECF5;strokeColor=#E7157B;fontColor=#7A0A42;fontSize=14;fontStyle=1;verticalAlign=top;spacingTop=10;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="770" y="235" width="390" height="420" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-lane-tools-a" value="Gateway + Read Tools" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EAF6E8;strokeColor=#3F8624;fontColor=#1D4D20;fontSize=14;fontStyle=1;verticalAlign=top;spacingTop=10;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1190" y="235" width="430" height="420" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-lane-data-a" value="データ / 分析支援" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF7E6;strokeColor=#D86613;fontColor=#5A2A00;fontSize=14;fontStyle=1;verticalAlign=top;spacingTop=10;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1650" y="235" width="670" height="420" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-icon-cognito-a" value="" style="sketch=0;outlineConnect=0;gradientColor=none;fillColor=#DD344C;strokeColor=#FFFFFF;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cognito;" vertex="1" parent="1">
+          <mxGeometry x="305" y="247" width="34" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-icon-fargate-a" value="" style="sketch=0;outlineConnect=0;gradientColor=none;fillColor=#ED7100;strokeColor=#FFFFFF;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.fargate;" vertex="1" parent="1">
+          <mxGeometry x="685" y="247" width="34" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-icon-agentcore-a" value="" style="sketch=0;outlineConnect=0;gradientColor=none;fillColor=#01A88D;strokeColor=#FFFFFF;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.bedrock_agentcore;" vertex="1" parent="1">
+          <mxGeometry x="1105" y="247" width="34" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-icon-gateway-a" value="" style="sketch=0;outlineConnect=0;gradientColor=none;fillColor=#01A88D;strokeColor=#FFFFFF;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.bedrock_agentcore;" vertex="1" parent="1">
+          <mxGeometry x="1565" y="247" width="34" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-icon-s3-a" value="" style="sketch=0;outlineConnect=0;gradientColor=none;fillColor=#7AA116;strokeColor=#FFFFFF;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.s3;" vertex="1" parent="1">
+          <mxGeometry x="2240" y="247" width="34" height="34" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p2-step1" value="1  Cognitoでログイン&#xa;一般利用者 / 承認者" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#687078;strokeWidth=2;fontColor=#232F3E;fontSize=13;fontStyle=1;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="85" y="295" width="250" height="72" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-step2" value="2  自然言語で依頼&#xa;「今週の問い合わせを分析…」" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#687078;strokeWidth=2;fontColor=#232F3E;fontSize=13;fontStyle=1;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="85" y="450" width="250" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-step3" value="3  ALB/Cognito identityを検証&#xa;actorから不透明なsession ID / user IDを導出&#xa;生のCognito subはRuntimeへ渡さない" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#8C4FFF;strokeWidth=2;fontColor=#3A1766;fontSize=12;fontStyle=1;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="420" y="295" width="290" height="98" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-step4" value="4  InvokeAgentRuntime&#xa;Endpoint: PROD&#xa;prompt + runtimeSessionId + runtimeUserId" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#8C4FFF;strokeWidth=2;fontColor=#3A1766;fontSize=12;fontStyle=1;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="420" y="455" width="290" height="92" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-step5" value="5  意図理解・処理計画&#xa;Strands Agent + Nova 2 Lite&#xa;選択可能なのはRead toolsのみ" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E7157B;strokeWidth=2;fontColor=#7A0A42;fontSize=13;fontStyle=1;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="805" y="295" width="320" height="92" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-step8" value="8  構造化結果を返却&#xa;output_contract_version: 1.0&#xa;response + proposed_actions（最大5件）&#xa;write_operations_performed: false" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E7157B;strokeWidth=2;fontColor=#7A0A42;fontSize=12;fontStyle=1;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="805" y="470" width="320" height="112" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-step6" value="6  AgentCore Gateway（MCP / IAM）&#xa;・get_business_requests&#xa;・analyze_request_data&#xa;・search_company_rules&#xa;・get_task_status" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#3F8624;strokeWidth=2;fontColor=#1D4D20;fontSize=12;fontStyle=1;align=left;spacingLeft=15;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1225" y="295" width="360" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-read-note" value="create_business_taskは&#xa;schema / targetから削除済み" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4F4;strokeColor=#C62828;fontColor=#7A1515;fontSize=12;fontStyle=1;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1225" y="490" width="360" height="64" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-s3-data" value="S3 架空業務データ&#xa;business_requests.csv&#xa;company_rules.md" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#FFFFFF;strokeColor=#3F8624;strokeWidth=2;fontColor=#1D4D20;fontSize=12;fontStyle=1;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1685" y="295" width="185" height="104" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-ddb-read" value="DynamoDB&#xa;Task status / Audit&#xa;entity_type GSI" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#FFFFFF;strokeColor=#3F8624;strokeWidth=2;fontColor=#1D4D20;fontSize=12;fontStyle=1;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1895" y="295" width="175" height="104" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-code" value="7a  Code Interpreter&#xa;取得済みデータをPythonで集計・検算&#xa;1分析ごとにsession開始 / 終了" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E7157B;strokeWidth=2;fontColor=#7A0A42;fontSize=12;fontStyle=1;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1685" y="470" width="250" height="92" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-memory" value="7b  AgentCore Memory&#xa;同一conversationの短期履歴&#xa;/users/{actorId}/preferences/&#xa;利用者別の長期設定" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E7157B;strokeWidth=2;fontColor=#7A0A42;fontSize=12;fontStyle=1;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1970" y="470" width="310" height="92" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p2-approval-band" value="B. 承認・書き込みフェーズ（Human-in-the-loop）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF7E6;strokeColor=#D86613;strokeWidth=2;fontColor=#5A2A00;fontSize=18;fontStyle=1;align=left;verticalAlign=top;spacingTop=12;spacingLeft=18;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="30" y="725" width="2320" height="570" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-lane-user-b" value="利用者 / 承認者" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F7F7F7;strokeColor=#687078;fontColor=#232F3E;fontSize=14;fontStyle=1;verticalAlign=top;spacingTop=10;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="60" y="780" width="300" height="470" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-lane-web-b" value="Next.js Web / BFF" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1EAFE;strokeColor=#8C4FFF;fontColor=#3A1766;fontSize=14;fontStyle=1;verticalAlign=top;spacingTop=10;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="390" y="780" width="350" height="470" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-lane-approval-b" value="Approval Lambda" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF7E6;strokeColor=#D86613;fontColor=#5A2A00;fontSize=14;fontStyle=1;verticalAlign=top;spacingTop=10;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="770" y="780" width="390" height="470" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-lane-write-b" value="Write Lambda" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4F4;strokeColor=#C62828;fontColor=#7A1515;fontSize=14;fontStyle=1;verticalAlign=top;spacingTop=10;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1190" y="780" width="430" height="470" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-lane-result-b" value="DynamoDB / 表示" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EAF6E8;strokeColor=#3F8624;fontColor=#1D4D20;fontSize=14;fontStyle=1;verticalAlign=top;spacingTop=10;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1650" y="780" width="670" height="470" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-icon-cognito-b" value="" style="sketch=0;outlineConnect=0;gradientColor=none;fillColor=#DD344C;strokeColor=#FFFFFF;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cognito;" vertex="1" parent="1">
+          <mxGeometry x="305" y="792" width="34" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-icon-fargate-b" value="" style="sketch=0;outlineConnect=0;gradientColor=none;fillColor=#ED7100;strokeColor=#FFFFFF;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.fargate;" vertex="1" parent="1">
+          <mxGeometry x="685" y="792" width="34" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-icon-lambda-approval-b" value="" style="sketch=0;outlineConnect=0;gradientColor=none;fillColor=#ED7100;strokeColor=#FFFFFF;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;" vertex="1" parent="1">
+          <mxGeometry x="1105" y="792" width="34" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-icon-lambda-write-b" value="" style="sketch=0;outlineConnect=0;gradientColor=none;fillColor=#ED7100;strokeColor=#FFFFFF;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;" vertex="1" parent="1">
+          <mxGeometry x="1565" y="792" width="34" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-icon-ddb-b" value="" style="sketch=0;outlineConnect=0;gradientColor=none;fillColor=#C925D1;strokeColor=#FFFFFF;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.dynamodb;" vertex="1" parent="1">
+          <mxGeometry x="2240" y="792" width="34" height="34" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p2-step10" value="10  提案を確認&#xa;承認 / 却下" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D86613;strokeWidth=2;fontColor=#5A2A00;fontSize=13;fontStyle=1;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="110" y="930" width="190" height="125" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-step9" value="9  Runtime応答を再検証&#xa;正常なproposed_actionsだけで&#xa;承認カードを自動生成" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#8C4FFF;strokeWidth=2;fontColor=#3A1766;fontSize=12;fontStyle=1;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="420" y="830" width="290" height="92" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-step11-bff" value="11  承認操作をBFFへ送信&#xa;CSRF header / identity / groupを検証&#xa;承認者だけがapprove / reject可能" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#8C4FFF;strokeWidth=2;fontColor=#3A1766;fontSize=12;fontStyle=1;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="420" y="985" width="290" height="98" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-step14-web" value="14  Dashboard / 実行履歴を表示&#xa;登録済みタスク数はBFF専用metricsで&#xa;DynamoDB GSIをCOUNT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#8C4FFF;strokeWidth=2;fontColor=#3A1766;fontSize=12;fontStyle=1;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="420" y="1135" width="290" height="88" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-step11-approval" value="11a  request_approval&#xa;11b  approve / reject / get_approval&#xa;承認状態と監査イベントを保存" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D86613;strokeWidth=2;fontColor=#5A2A00;fontSize=12;fontStyle=1;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="805" y="875" width="320" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-reject" value="REJECTED&#xa;タスク登録なし&#xa;監査イベントのみ" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F7F7F7;strokeColor=#687078;fontColor=#232F3E;fontSize=12;fontStyle=1;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="805" y="1060" width="320" height="76" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-step12" value="12  BFFが承認データを再取得して直接呼出&#xa;Write Lambdaで再検証&#xa;・status = APPROVED&#xa;・proposal完全一致&#xa;・同一approval_idの冪等性" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C62828;strokeWidth=2;fontColor=#7A1515;fontSize=12;fontStyle=1;align=left;spacingLeft=15;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1225" y="875" width="360" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-write-boundary" value="モデル / Gatewayからは到達不可&#xa;IAM: ECS Task Role → 指定Lambdaのみ" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4F4;strokeColor=#C62828;fontColor=#7A1515;fontSize=12;fontStyle=1;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1225" y="1070" width="360" height="72" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-step13-ddb" value="13  DynamoDBへ永続化&#xa;APPROVAL#... / APPROVAL&#xa;APPROVAL#... / EVENT#...&#xa;TASK#... / TASK&#xa;entity_type = TASK（GSI）" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;fillColor=#FFFFFF;strokeColor=#3F8624;strokeWidth=2;fontColor=#1D4D20;fontSize=12;fontStyle=1;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1685" y="855" width="285" height="150" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-audit" value="監査履歴&#xa;APPROVAL_REQUESTED&#xa;APPROVED / REJECTED&#xa;TASK_REGISTERED&#xa;actor・時刻・task_id" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#3F8624;strokeWidth=2;fontColor=#1D4D20;fontSize=12;fontStyle=1;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="2010" y="855" width="270" height="150" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-dashboard" value="Dashboard / History&#xa;未対応・緊急・期限超過&#xa;登録済みタスク数&#xa;承認者・作成タスク・イベント" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#3F8624;strokeWidth=2;fontColor=#1D4D20;fontSize=12;fontStyle=1;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="1810" y="1090" width="320" height="108" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p2-guardrails" value="実装済みガードレール" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#232F3E;strokeColor=#232F3E;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=left;spacingLeft=18;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="30" y="1320" width="260" height="42" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-guardrail-list" value="① Read / Write IAM分離　 ② Gatewayは4 Read toolsのみ　 ③ 承認をLambdaで強制　 ④ proposal完全一致と冪等性　 ⑤ Cognito利用者分離Memory　 ⑥ CloudWatch / 監査イベントで追跡" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#687078;fontColor=#232F3E;fontSize=13;align=left;spacingLeft=18;fontFamily=Noto Sans JP;" vertex="1" parent="1">
+          <mxGeometry x="305" y="1320" width="2045" height="42" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p2-e-1-3" value="auth claims" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#D86613;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;" edge="1" parent="1" source="p2-step1" target="p2-step3">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-e-2-4" value="prompt" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#146EB4;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;" edge="1" parent="1" source="p2-step2" target="p2-step4">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-e-3-4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#8C4FFF;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="p2-step3" target="p2-step4">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-e-4-5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#E7157B;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="p2-step4" target="p2-step5">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-e-5-6" value="tool selection" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#3F8624;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;" edge="1" parent="1" source="p2-step5" target="p2-step6">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-e-6-s3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#3F8624;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="p2-step6" target="p2-s3-data">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-e-6-ddb" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#3F8624;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="p2-step6" target="p2-ddb-read">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-e-5-code" value="optional" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#E7157B;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;" edge="1" parent="1" source="p2-step5" target="p2-code">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-e-5-memory" value="retrieve / store" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#E7157B;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;" edge="1" parent="1" source="p2-step5" target="p2-memory">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-e-5-8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#E7157B;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="p2-step5" target="p2-step8">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-e-8-9" value="validated JSON" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#8C4FFF;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;" edge="1" parent="1" source="p2-step8" target="p2-step9">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-e-9-10" value="approval card" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#D86613;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;" edge="1" parent="1" source="p2-step9" target="p2-step10">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-e-10-bff" value="approve / reject" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#D86613;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;" edge="1" parent="1" source="p2-step10" target="p2-step11-bff">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-e-bff-approval" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#D86613;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="p2-step11-bff" target="p2-step11-approval">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-e-approval-reject" value="reject" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#687078;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;" edge="1" parent="1" source="p2-step11-approval" target="p2-reject">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-e-approval-write" value="APPROVED" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#C62828;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;fontStyle=1;" edge="1" parent="1" source="p2-step11-approval" target="p2-step12">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-e-write-ddb" value="PutItem / Transact" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#3F8624;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;" edge="1" parent="1" source="p2-step12" target="p2-step13-ddb">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-e-ddb-audit" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#3F8624;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="p2-step13-ddb" target="p2-audit">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-e-ddb-dashboard" value="query / count" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#3F8624;strokeWidth=2;endArrow=block;endFill=1;fontSize=10;" edge="1" parent="1" source="p2-step13-ddb" target="p2-dashboard">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-e-audit-dashboard" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#3F8624;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="p2-audit" target="p2-dashboard">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2-e-dashboard-web" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#8C4FFF;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="p2-dashboard" target="p2-step14-web">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
